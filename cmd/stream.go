@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"code.vegaprotocol.io/vegatools/stream"
+	"code.vegaprotocol.io/vega-exporter/stream"
 
 	"github.com/spf13/cobra"
 )
@@ -27,8 +27,6 @@ var (
 func init() {
 	rootCmd.AddCommand(streamCmd)
 	streamCmd.Flags().UintVarP(&streamOpts.batchSize, "batch-size", "b", 0, "size of the event stream batch of events")
-	streamCmd.Flags().StringVarP(&streamOpts.party, "party", "p", "", "name of the party to listen for updates")
-	streamCmd.Flags().StringVarP(&streamOpts.market, "market", "m", "", "name of the market to listen for updates")
 	streamCmd.Flags().StringVarP(&streamOpts.serverAddr, "address", "a", "", "address of the grpc server")
 	streamCmd.Flags().StringVar(&streamOpts.logFormat, "log-format", "raw", "output stream data in specified format. Allowed values: raw (default), text, json")
 	streamCmd.Flags().BoolVarP(&streamOpts.reconnect, "reconnect", "r", false, "if connection dies, attempt to reconnect")

@@ -33,10 +33,24 @@ var sumWithdrawals = prometheus.NewCounterVec(
 )
 var countWithdrawals = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
-		Name: "vega_withdrawals_total",
+		Name: "vega_withdrawals_count_total",
 		Help: "Total count of withdrawals",
 	},
 	[]string{"chain_id", "status", "asset", "eth_tx"},
+)
+var sumTransfers = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "vega_transfers_sum_total",
+		Help: "Total amount of transfers",
+	},
+	[]string{"chain_id", "status", "asset"},
+)
+var countTransfers = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "vega_transfers_count_total",
+		Help: "Total count of transfers",
+	},
+	[]string{"chain_id", "status", "asset"},
 )
 
 func connect(ctx context.Context, batchSize uint, serverAddr string) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
@@ -154,6 +168,8 @@ func Run(
 ) error {
 	prometheus.MustRegister(sumWithdrawals)
 	prometheus.MustRegister(countWithdrawals)
+	prometheus.MustRegister(sumTransfers)
+	prometheus.MustRegister(countTransfers)
 
 	flag.Parse()
 
@@ -181,6 +197,8 @@ func handleEvents(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEve
 	switch e.Type {
 	case eventspb.BusEventType_BUS_EVENT_TYPE_WITHDRAWAL:
 		handleWithdrawals(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_TRANSFER:
+		handleTransfers(ctx, conn, e)
 	}
 }
 
@@ -213,9 +231,39 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 		"asset":    asset,
 		"eth_tx":   eth_tx,
 	}
-	
+
 	sumWithdrawals.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(amount, prometheus.Labels{"id": e.GetId()})
 	countWithdrawals.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(1, prometheus.Labels{"id": e.GetId()})
+}
+
+func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	t := e.GetTransfer()
+
+	asset := ""
+	assetsReq := &datanode.AssetByIDRequest{Id: t.Asset}
+	assetResp, err := tdsClient.AssetByID(ctx, assetsReq)
+	if err != nil {
+		log.Printf("unable to fetch asset err=%v", err)
+		asset = t.Asset
+	} else {
+		asset = assetResp.Asset.Details.Symbol
+	}
+
+	amount, err := strconv.ParseFloat(t.GetAmount(), 64)
+	if err != nil {
+		log.Printf("unable to parse event err=%v", err)
+		return
+	}
+
+	labels := prometheus.Labels{
+		"chain_id": e.GetChainId(),
+		"status":   t.GetStatus().String(),
+		"asset":    asset,
+	}
+
+	sumTransfers.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(amount, prometheus.Labels{"id": e.GetId()})
+	countTransfers.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(1, prometheus.Labels{"id": e.GetId()})
 }
 
 func logToStdout(e *eventspb.BusEvent) {

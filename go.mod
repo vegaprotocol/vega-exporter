@@ -1,4 +1,4 @@
-module code.vegaprotocol.io/vegatools
+module code.vegaprotocol.io/vega-exporter
 
 go 1.18
 
