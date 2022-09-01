@@ -53,6 +53,21 @@ var countTransfers = prometheus.NewCounterVec(
 	[]string{"chain_id", "status", "asset"},
 )
 
+var assetQuantum = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "vega_asset_quantum",
+		Help: "Quantum value for each asset",
+	},
+	[]string{"asset"},
+)
+var assetDecimals = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "vega_asset_decimals",
+		Help: "Decimals for each asset",
+	},
+	[]string{"asset"},
+)
+
 func connect(ctx context.Context, batchSize uint, serverAddr string) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
 
 	conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
@@ -170,6 +185,8 @@ func Run(
 	prometheus.MustRegister(countWithdrawals)
 	prometheus.MustRegister(sumTransfers)
 	prometheus.MustRegister(countTransfers)
+	prometheus.MustRegister(assetQuantum)
+	prometheus.MustRegister(assetDecimals)
 
 	flag.Parse()
 
@@ -214,6 +231,13 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 		asset = w.Asset
 	} else {
 		asset = assetResp.Asset.Details.Symbol
+		quantum, err := strconv.ParseFloat(assetResp.Asset.Details.Quantum, 64)
+		if err != nil {
+			log.Printf("unable to parse asset quantum err=%v", err)
+		} else {
+			assetQuantum.With(prometheus.Labels{"asset": asset}).Set(quantum)
+		}
+		assetDecimals.With(prometheus.Labels{"asset": asset}).Set(float64(assetResp.Asset.Details.Decimals))
 	}
 
 	amount, err := strconv.ParseFloat(w.GetAmount(), 64)
@@ -248,6 +272,13 @@ func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.Bus
 		asset = t.Asset
 	} else {
 		asset = assetResp.Asset.Details.Symbol
+		quantum, err := strconv.ParseFloat(assetResp.Asset.Details.Quantum, 64)
+		if err != nil {
+			log.Printf("unable to parse asset quantum err=%v", err)
+		} else {
+			assetQuantum.With(prometheus.Labels{"asset": asset}).Set(quantum)
+		}
+		assetDecimals.With(prometheus.Labels{"asset": asset}).Set(float64(assetResp.Asset.Details.Decimals))
 	}
 
 	amount, err := strconv.ParseFloat(t.GetAmount(), 64)
