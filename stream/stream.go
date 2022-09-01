@@ -221,15 +221,15 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 		log.Printf("unable to parse event err=%v", err)
 		return
 	}
-	eth_tx := "false"
+	ethTx := "false"
 	if w.GetTxHash() != "" {
-		eth_tx = "true"
+		ethTx = "true"
 	}
 	labels := prometheus.Labels{
 		"chain_id": e.GetChainId(),
 		"status":   w.GetStatus().String(),
 		"asset":    asset,
-		"eth_tx":   eth_tx,
+		"eth_tx":   ethTx,
 	}
 
 	sumWithdrawals.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(amount, prometheus.Labels{"id": e.GetId()})
