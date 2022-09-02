@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -219,28 +220,40 @@ func handleEvents(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEve
 	}
 }
 
-func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
-	tdsClient := datanode.NewTradingDataServiceClient(conn)
-	w := e.GetWithdrawal()
+func getAssetInfo(
+	ctx context.Context, conn *grpc.ClientConn, assetId string,
+) (asset string, decimals uint64, quantum float64) {
 
-	asset := ""
-	assetsReq := &datanode.AssetByIDRequest{Id: w.Asset}
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+
+	assetsReq := &datanode.AssetByIDRequest{Id: assetId}
 	assetResp, err := tdsClient.AssetByID(ctx, assetsReq)
 	if err != nil {
 		log.Printf("unable to fetch asset err=%v", err)
-		asset = w.Asset
+		asset = assetId
+		decimals = 0
+		quantum = 1
 	} else {
 		asset = assetResp.Asset.Details.Symbol
+		decimals = assetResp.Asset.Details.Decimals
 		quantum, err := strconv.ParseFloat(assetResp.Asset.Details.Quantum, 64)
 		if err != nil {
 			log.Printf("unable to parse asset quantum err=%v", err)
 		} else {
 			assetQuantum.With(prometheus.Labels{"asset": asset}).Set(quantum)
 		}
-		assetDecimals.With(prometheus.Labels{"asset": asset}).Set(float64(assetResp.Asset.Details.Decimals))
+		assetDecimals.With(prometheus.Labels{"asset": asset}).Set(float64(decimals))
 	}
+	return
+}
+
+func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	w := e.GetWithdrawal()
+
+	asset, decimals, _ := getAssetInfo(ctx, conn, w.Asset)
 
 	amount, err := strconv.ParseFloat(w.GetAmount(), 64)
+	amount = amount / math.Pow(10, float64(decimals))
 	if err != nil {
 		log.Printf("unable to parse event err=%v", err)
 		return
@@ -261,25 +274,8 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 }
 
 func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
-	tdsClient := datanode.NewTradingDataServiceClient(conn)
 	t := e.GetTransfer()
-
-	asset := ""
-	assetsReq := &datanode.AssetByIDRequest{Id: t.Asset}
-	assetResp, err := tdsClient.AssetByID(ctx, assetsReq)
-	if err != nil {
-		log.Printf("unable to fetch asset err=%v", err)
-		asset = t.Asset
-	} else {
-		asset = assetResp.Asset.Details.Symbol
-		quantum, err := strconv.ParseFloat(assetResp.Asset.Details.Quantum, 64)
-		if err != nil {
-			log.Printf("unable to parse asset quantum err=%v", err)
-		} else {
-			assetQuantum.With(prometheus.Labels{"asset": asset}).Set(quantum)
-		}
-		assetDecimals.With(prometheus.Labels{"asset": asset}).Set(float64(assetResp.Asset.Details.Decimals))
-	}
+	asset, _, _ := getAssetInfo(ctx, conn, t.Asset)
 
 	amount, err := strconv.ParseFloat(t.GetAmount(), 64)
 	if err != nil {
