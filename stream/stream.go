@@ -221,16 +221,16 @@ func handleEvents(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEve
 }
 
 func getAssetInfo(
-	ctx context.Context, conn *grpc.ClientConn, assetId string,
+	ctx context.Context, conn *grpc.ClientConn, assetID string,
 ) (asset string, decimals uint64, quantum float64) {
 
 	tdsClient := datanode.NewTradingDataServiceClient(conn)
 
-	assetsReq := &datanode.AssetByIDRequest{Id: assetId}
+	assetsReq := &datanode.AssetByIDRequest{Id: assetID}
 	assetResp, err := tdsClient.AssetByID(ctx, assetsReq)
 	if err != nil {
 		log.Printf("unable to fetch asset err=%v", err)
-		asset = assetId
+		asset = assetID
 		decimals = 0
 		quantum = 1
 	} else {
