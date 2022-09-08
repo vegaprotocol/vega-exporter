@@ -3,7 +3,7 @@ name: Build and Publish Docker image
 on:
   push:
     branches:
-      - develop
+      - main
     tags:
       - "*"
 
@@ -13,9 +13,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -30,17 +27,29 @@ jobs:
         id: vars
         run: |
           ref="$(echo -n "${GITHUB_REF#refs/*/}" | tr -c 'A-Za-z0-9._' -)"
-          if [[ "$ref" == "develop" ]] ; then ref=latest ; fi
+          if [[ "$ref" == "main" ]] ; then ref=latest ; fi
           echo ::set-output "name=tag::$ref"
 
-      - name: Build
-        id: docker_build
+      - name: Build exporter
+        id: exporter_docker_build
         uses: docker/build-push-action@v3
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/vega-exporter:${{ steps.vars.outputs.tag }}
 
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
+      - name: Exporter image digest
+        run: echo ${{ steps.exporter_docker_build.outputs.digest }}
+
+      - name: Build mainnet-observer
+        id: observer_docker_build
+        uses: docker/build-push-action@v3
+        with:
+          context: mainnet-observer
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/mainnet-observer:${{ steps.vars.outputs.tag }}
+
+      - name: Mainnet-observer image digest
+        run: echo ${{ steps.observer_docker_build.outputs.digest }}
