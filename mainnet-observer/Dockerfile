@@ -80,3 +80,5 @@ RUN vega nodewallet generate --home=$VEGAHOME --output=json -c vega -p $PASSPHRA
 # Set up data-node
 RUN data-node init --home=$VEGAHOME && \
     dasel put string -f $VEGAHOME/config/data-node/config.toml API.CoreNodeIP localhost
+
+COPY corewrapper.sh .
