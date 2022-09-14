@@ -38,7 +38,6 @@ RUN rm -f bin/vega-linux-amd64 && \
     cp bin/vega-linux-amd64 bin/vega && \
     chmod +x bin/vega && \
     ./bin/vega version
-
 # Get data node
 RUN rm -f bin/data-node-linux-amd64 && \
     rm -f bin/data-node && \
@@ -61,4 +60,5 @@ RUN set -o pipefail &&\
 RUN data-node init --home=$VEGAHOME && \
     dasel put string -f $VEGAHOME/config/data-node/config.toml API.CoreNodeIP localhost
 RUN mkdir -p /vega/vega/config/node
+RUN mkdir -p /vega/tm/data
 COPY corewrapper.sh .
