@@ -2,16 +2,10 @@ FROM alpine:3.14
 
 # Config
 ENV NETWORK=mainnet1
-ENV ETH_NETWORK=mainnet
 ENV UID=1000
 
 ENV VEGA_VERSION=0.53.0
 ENV DATA_NODE_VERSION=0.53.1
-ENV INFURA_TOKEN=8c026e3c74c9488f844b1096d5aa903b
-ENV PASSPHRASE=super_secret
-ENV PASSPHRASE_FILE=/vega/passphrase
-ENV WALLET_NAME=my_wallet
-ENV INFURA_API_ADDRESS=https://${ETH_NETWORK}.infura.io/v3/$INFURA_TOKEN
 
 WORKDIR /vega
 ENV TMHOME=/vega/tm
@@ -63,22 +57,8 @@ RUN set -o pipefail &&\
     dasel put string -f $TMHOME/config/config.toml rpc.laddr tcp://0.0.0.0:26657 && \
     rm peers
 
-# Set up vega
-RUN echo $PASSPHRASE > $PASSPHRASE_FILE &&\
-    vega init --home=$VEGAHOME --output=json --nodewallet-passphrase-file=$PASSPHRASE_FILE full &&\
-    dasel put string -f $VEGAHOME/config/node/config.toml NodeWallet.ETH.Address $INFURA_API_ADDRESS &&\
-    dasel put bool -f $VEGAHOME/config/node/config.toml Broker.Socket.Enabled true && \
-    dasel put string -f $VEGAHOME/config/node/config.toml Broker.Socket.Address localhost &&\
-    dasel put string -f $VEGAHOME/config/node/config.toml Blockchain.Tendermint.ClientAddr tcp://localhost:26657 &&\
-    dasel put string -f $VEGAHOME/config/node/config.toml Blockchain.Tendermint.ServerAddr 0.0.0.0 &&\
-    dasel put string -f $VEGAHOME/config/node/config.toml Snapshot.Level Debug
-
-# Set up wallets
-RUN vega nodewallet generate --home=$VEGAHOME --output=json -c vega -p $PASSPHRASE_FILE --wallet-passphrase-file=$PASSPHRASE_FILE &&\
-    vega nodewallet generate --home=$VEGAHOME --output=json -c ethereum -p $PASSPHRASE_FILE --wallet-passphrase-file=$PASSPHRASE_FILE
-
 # Set up data-node
 RUN data-node init --home=$VEGAHOME && \
     dasel put string -f $VEGAHOME/config/data-node/config.toml API.CoreNodeIP localhost
-
+RUN mkdir -p /vega/vega/config/node
 COPY corewrapper.sh .

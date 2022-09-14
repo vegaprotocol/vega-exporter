@@ -1,0 +1,231 @@
+NodeMode = "full"
+UlimitNOFile = 8192
+
+[Admin]
+  Level = "Info"
+  [Admin.Server]
+    SocketPath = "/tmp/vega.sock"
+    HttpPath = "/rpc"
+    Enabled = true
+
+[API]
+  Level = "Info"
+  Timeout = "5s"
+  Port = 3002
+  IP = "0.0.0.0"
+  StreamRetries = 3
+  DisableTxCommit = true
+  [API.REST]
+    Port = 3003
+    IP = "0.0.0.0"
+    Enabled = true
+    APMEnabled = true
+
+[Blockchain]
+  Level = "Debug"
+  LogTimeDebug = true
+  LogOrderSubmitDebug = true
+  LogOrderAmendDebug = false
+  LogOrderCancelDebug = false
+  ChainProvider = "tendermint"
+  [Blockchain.Tendermint]
+    Level = "Info"
+    LogTimeDebug = true
+    ClientAddr = "tcp://127.0.0.1:26657"
+    ClientEndpoint = "/websocket"
+    ServerPort = 26658
+    ServerAddr = "127.0.0.1"
+  [Blockchain.Null]
+    Level = "Info"
+    BlockDuration = "1s"
+    TransactionsPerBlock = 10
+    GenesisFile = ""
+    IP = "localhost"
+    Port = 3101
+
+[Collateral]
+  Level = "Info"
+
+[CoreAPI]
+  LogLevel = "Info"
+  Accounts = true
+  Assets = true
+  NetworkParameters = true
+  NetworkLimits = true
+  Parties = true
+  Validators = true
+  Proposals = true
+  Markets = true
+  Votes = true
+  MarketsData = true
+  PartiesStake = true
+  Delegations = true
+
+[Execution]
+  Level = "Info"
+  [Execution.Matching]
+    Level = "Info"
+    LogPriceLevelsDebug = false
+    LogRemovedOrdersDebug = false
+  [Execution.Risk]
+    Level = "Info"
+    LogMarginUpdate = true
+  [Execution.Position]
+    Level = "Info"
+    LogPositionUpdate = true
+  [Execution.Settlement]
+    Level = "Info"
+  [Execution.Fee]
+    Level = "Info"
+  [Execution.Liquidity]
+    Level = "Info"
+
+[Processor]
+  Level = "Info"
+  LogOrderSubmitDebug = true
+  LogOrderAmendDebug = false
+  LogOrderCancelDebug = false
+  [Processor.Ratelimit]
+    Requests = 500
+    PerNBlocks = 10
+
+[Logging]
+  Environment = "dev"
+  [Logging.Custom]
+    [Logging.Custom.Zap]
+      Level = -1
+      Development = true
+      Encoding = "console"
+      OutputPaths = ["stdout"]
+      ErrorOutputPaths = ["stderr"]
+    [Logging.Custom.ZapEncoder]
+      CallerKey = "C"
+      EncodeCaller = "short"
+      EncodeDuration = "string"
+      EncodeLevel = "capital"
+      EncodeName = "full"
+      EncodeTime = "iso8601"
+      LevelKey = "L"
+      LineEnding = "\n"
+      MessageKey = "M"
+      NameKey = "N"
+      TimeKey = "T"
+
+[Oracles]
+  Level = "Info"
+
+[Time]
+  Level = "Info"
+
+[Epoch]
+  Level = "Info"
+
+[Monitoring]
+  Level = "Info"
+  Interval = "500ms"
+  Retries = 5
+
+[Metrics]
+  Level = "Info"
+  Timeout = "5s"
+  Port = 2112
+  Path = "/metrics"
+  Enabled = false
+
+[Governance]
+  Level = "Info"
+
+[NodeWallet]
+  Level = "Info"
+  [NodeWallet.ETH]
+    Level = "Info"
+    Address = "https://mainnet.infura.io/v3/8c026e3c74c9488f844b1096d5aa903b"
+    ClefAddress = ""
+
+[Assets]
+  Level = "Info"
+
+[Notary]
+  Level = "Info"
+
+[EvtForward]
+  Level = "Info"
+  RetryRate = "10s"
+  BlockchainQueueAllowlist = []
+  [EvtForward.Ethereum]
+    Level = "Info"
+
+[Genesis]
+  Level = "Info"
+
+[Validators]
+  Level = "Info"
+
+[Banking]
+  Level = "Info"
+
+[Stats]
+  Level = "Info"
+
+[NetworkParameters]
+  Level = "Info"
+
+[Limits]
+  Level = "Info"
+
+[Checkpoint]
+  Level = "Info"
+
+[Staking]
+  Level = "Info"
+
+[Broker]
+  Level = "Info"
+  [Broker.Socket]
+    DialTimeout = "2m0s"
+    DialRetryInterval = "5s"
+    SocketQueueTimeout = "3s"
+    EventChannelBufferSize = 10000000
+    SocketChannelBufferSize = 1000000
+    MaxSendTimeouts = 10
+    Address = "127.0.0.1"
+    Port = 3005
+    Enabled = true
+    Transport = "tcp"
+  [Broker.File]
+    Enabled = false
+    File = ""
+
+[Rewards]
+  Level = "Info"
+
+[Delegation]
+  Level = "Info"
+
+[Spam]
+  Level = "Info"
+
+[PoW]
+  Level = "Info"
+
+[Snapshot]
+  Level = "Info"
+  KeepRecent = 10
+  RetryLimit = 5
+  Storage = "GOLevelDB"
+  DBPath = ""
+  StartHeight = 0
+
+[StateVar]
+  Level = "Info"
+
+[ERC20MultiSig]
+  Level = "Info"
+
+[Pprof]
+  Level = "Info"
+  Enabled = false
+  Port = 6060
+  ProfilesDir = "/tmp"
+  BlockProfileRate = 0
+  MutexProfileFraction = 0
