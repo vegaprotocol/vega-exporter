@@ -268,7 +268,6 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 		"asset":    asset,
 		"eth_tx":   ethTx,
 	}
-
 	sumWithdrawals.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(amount, prometheus.Labels{"id": e.GetId()})
 	countWithdrawals.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(1, prometheus.Labels{"id": e.GetId()})
 }
