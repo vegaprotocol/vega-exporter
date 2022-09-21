@@ -1,4 +1,4 @@
-package stream
+package vega
 
 import (
 	"context"
@@ -256,9 +256,9 @@ func getAssetInfo(
 		if err != nil {
 			log.Printf("unable to parse asset quantum err=%v", err)
 		} else {
-			assetQuantum.With(prometheus.Labels{"asset": asset}).Set(quantum)
+			assetQuantum.With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(quantum)
 		}
-		assetDecimals.With(prometheus.Labels{"asset": asset}).Set(float64(decimals))
+		assetDecimals.With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(float64(decimals))
 	}
 	return
 }

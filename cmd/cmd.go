@@ -1,10 +1,18 @@
 package cmd
 
 import (
-	"code.vegaprotocol.io/vega-exporter/stream"
+	"fmt"
+	"os"
 
+	"code.vegaprotocol.io/vega-exporter/vega"
 	"github.com/spf13/cobra"
 )
+
+// rootCmd represents the base command when called without any subcommands
+var rootCmd = &cobra.Command{
+	Use:   "vegaexporter",
+	Short: "Prometheus Exporter for Vega Protocol",
+}
 
 var (
 	streamOpts struct {
@@ -18,11 +26,20 @@ var (
 	}
 
 	streamCmd = &cobra.Command{
-		Use:   "stream",
+		Use:   "run",
 		Short: "Stream events from vega node",
 		RunE:  runStream,
 	}
 )
+
+// Execute is the main function of `cmd` package
+// Usually called by the `main.main()`
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
 
 func init() {
 	rootCmd.AddCommand(streamCmd)
@@ -35,7 +52,7 @@ func init() {
 }
 
 func runStream(cmd *cobra.Command, args []string) error {
-	return stream.Run(streamOpts.batchSize,
+	return vega.Run(streamOpts.batchSize,
 		streamOpts.serverAddr,
 		streamOpts.reconnect,
 	)
