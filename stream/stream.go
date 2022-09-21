@@ -16,7 +16,7 @@ import (
 	"time"
 
 	datanode "code.vegaprotocol.io/vega/protos/data-node/api/v1"
-
+	proto "code.vegaprotocol.io/vega/protos/vega"
 	api "code.vegaprotocol.io/vega/protos/vega/api/v1"
 	eventspb "code.vegaprotocol.io/vega/protos/vega/events/v1"
 	"github.com/golang/protobuf/jsonpb"
@@ -59,14 +59,28 @@ var assetQuantum = prometheus.NewGaugeVec(
 		Name: "vega_asset_quantum",
 		Help: "Quantum value for each asset",
 	},
-	[]string{"asset"},
+	[]string{"chain_id", "asset"},
 )
 var assetDecimals = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "vega_asset_decimals",
 		Help: "Decimals for each asset",
 	},
-	[]string{"asset"},
+	[]string{"chain_id", "asset"},
+)
+var marketBestOfferPrice = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "vega_market_best_offer_price",
+		Help: "Best sell price per market",
+	},
+	[]string{"chain_id", "market"},
+)
+var marketBestBidPrice = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "vega_market_best_bid_price",
+		Help: "Best buy price per market",
+	},
+	[]string{"chain_id", "market"},
 )
 
 func connect(ctx context.Context, batchSize uint, serverAddr string) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
@@ -85,6 +99,7 @@ func connect(ctx context.Context, batchSize uint, serverAddr string) (*grpc.Clie
 	busEventTypes := []eventspb.BusEventType{
 		eventspb.BusEventType_BUS_EVENT_TYPE_WITHDRAWAL,
 		eventspb.BusEventType_BUS_EVENT_TYPE_TRANSFER,
+		eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA,
 	}
 	if err != nil {
 		return conn, stream, err
@@ -172,7 +187,7 @@ func ReadEvents(
 		}
 	}()
 	http.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":8000", nil)
 	return nil
 }
 
@@ -188,6 +203,8 @@ func Run(
 	prometheus.MustRegister(countTransfers)
 	prometheus.MustRegister(assetQuantum)
 	prometheus.MustRegister(assetDecimals)
+	prometheus.MustRegister(marketBestBidPrice)
+	prometheus.MustRegister(marketBestOfferPrice)
 
 	flag.Parse()
 
@@ -210,22 +227,21 @@ func Run(
 }
 
 func handleEvents(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
-	logToStdout(e)
-
 	switch e.Type {
 	case eventspb.BusEventType_BUS_EVENT_TYPE_WITHDRAWAL:
 		handleWithdrawals(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_TRANSFER:
 		handleTransfers(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA:
+		handleMarketData(ctx, conn, e)
 	}
 }
 
 func getAssetInfo(
-	ctx context.Context, conn *grpc.ClientConn, assetID string,
+	ctx context.Context, conn *grpc.ClientConn, assetID string, chainID string,
 ) (asset string, decimals uint64, quantum float64) {
 
 	tdsClient := datanode.NewTradingDataServiceClient(conn)
-
 	assetsReq := &datanode.AssetByIDRequest{Id: assetID}
 	assetResp, err := tdsClient.AssetByID(ctx, assetsReq)
 	if err != nil {
@@ -248,9 +264,10 @@ func getAssetInfo(
 }
 
 func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	logToStdout(e)
 	w := e.GetWithdrawal()
-
-	asset, decimals, _ := getAssetInfo(ctx, conn, w.Asset)
+	chainID := e.GetChainId()
+	asset, decimals, _ := getAssetInfo(ctx, conn, w.Asset, chainID)
 
 	amount, err := strconv.ParseFloat(w.GetAmount(), 64)
 	amount = amount / math.Pow(10, float64(decimals))
@@ -263,7 +280,7 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 		ethTx = "true"
 	}
 	labels := prometheus.Labels{
-		"chain_id": e.GetChainId(),
+		"chain_id": chainID,
 		"status":   w.GetStatus().String(),
 		"asset":    asset,
 		"eth_tx":   ethTx,
@@ -272,9 +289,50 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 	countWithdrawals.With(labels).(prometheus.ExemplarAdder).AddWithExemplar(1, prometheus.Labels{"id": e.GetId()})
 }
 
+func getMarketName(
+	ctx context.Context, conn *grpc.ClientConn, marketID string,
+) (name string) {
+
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	marketReq := &datanode.MarketByIDRequest{MarketId: marketID}
+	marketResp, err := tdsClient.MarketByID(ctx, marketReq)
+	if err != nil {
+		log.Printf("unable to fetch market err=%v", err)
+		name = marketID
+	} else {
+		name = marketResp.Market.TradableInstrument.Instrument.Name
+	}
+	return name
+}
+
+func handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	md := e.GetMarketData()
+	if md.MarketTradingMode == proto.Market_TRADING_MODE_CONTINUOUS {
+		sellPrice, err := strconv.ParseFloat(md.BestOfferPrice, 64)
+		if err != nil {
+			log.Printf("unable to parse event err=%v", err)
+			return
+		}
+		buyPrice, err := strconv.ParseFloat(md.BestBidPrice, 64)
+		if err != nil {
+			log.Printf("unable to parse event err=%v", err)
+			return
+		}
+		labels := prometheus.Labels{
+			"chain_id": e.GetChainId(),
+			"market":   getMarketName(ctx, conn, md.Market),
+		}
+
+		marketBestOfferPrice.With(labels).Set(sellPrice)
+		marketBestOfferPrice.With(labels).Set(buyPrice)
+	}
+}
+
 func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	logToStdout(e)
 	t := e.GetTransfer()
-	asset, _, _ := getAssetInfo(ctx, conn, t.Asset)
+	chainID := e.GetChainId()
+	asset, _, _ := getAssetInfo(ctx, conn, t.Asset, chainID)
 
 	amount, err := strconv.ParseFloat(t.GetAmount(), 64)
 	if err != nil {
@@ -283,7 +341,7 @@ func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.Bus
 	}
 
 	labels := prometheus.Labels{
-		"chain_id": e.GetChainId(),
+		"chain_id": chainID,
 		"status":   t.GetStatus().String(),
 		"asset":    asset,
 	}
