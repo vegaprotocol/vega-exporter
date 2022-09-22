@@ -83,7 +83,7 @@ var marketBestBidPrice = prometheus.NewGaugeVec(
 	[]string{"chain_id", "market"},
 )
 
-func connect(ctx context.Context, batchSize uint, serverAddr string) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
+func connect(ctx context.Context, serverAddr string) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
 
 	conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
 	if err != nil {
@@ -105,12 +105,7 @@ func connect(ctx context.Context, batchSize uint, serverAddr string) (*grpc.Clie
 		return conn, stream, err
 	}
 
-	req := &api.ObserveEventBusRequest{
-		//MarketId:  market,
-		//PartyId:   party,
-		BatchSize: int64(batchSize),
-		Type:      busEventTypes,
-	}
+	req := &api.ObserveEventBusRequest{Type: busEventTypes}
 
 	if err := stream.Send(req); err != nil {
 		return conn, stream, fmt.Errorf("error when sending initial message in stream: %w", err)
@@ -123,18 +118,13 @@ func ReadEvents(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	wg *sync.WaitGroup,
-	batchSize uint,
 	serverAddr string,
-	reconnect bool,
+	listenAddr string,
 ) error {
-	conn, stream, err := connect(ctx, batchSize, serverAddr)
+	conn, stream, err := connect(ctx, serverAddr)
 
 	if err != nil {
 		return fmt.Errorf("failed to connect to event stream: %w", err)
-	}
-
-	poll := &api.ObserveEventBusRequest{
-		BatchSize: int64(batchSize),
 	}
 
 	wg.Add(1)
@@ -158,45 +148,30 @@ func ReadEvents(
 				for _, e := range o.Events {
 					handleEvents(ctx, conn, e)
 				}
-				if batchSize > 0 {
-					if err := stream.SendMsg(poll); err != nil {
-						log.Printf("failed to poll next event batch err=%v", err)
-						return
-					}
-				}
 			}
 
-			if reconnect {
-				// Keep waiting and retrying until we reconnect
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					default:
-						time.Sleep(time.Second * 5)
-						log.Printf("Attempting to reconnect to the node")
-						conn, stream, err = connect(ctx, batchSize, serverAddr)
-					}
-					if err == nil {
-						break
-					}
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					time.Sleep(time.Second * 5)
+					log.Printf("Attempting to reconnect to the node")
+					conn, stream, err = connect(ctx, serverAddr)
 				}
-			} else {
-				break
+				if err == nil {
+					break
+				}
 			}
 		}
 	}()
 	http.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
-	http.ListenAndServe(":8000", nil)
+	http.ListenAndServe(listenAddr, nil)
 	return nil
 }
 
 // Run is the main function of `stream` package
-func Run(
-	batchSize uint,
-	serverAddr string,
-	reconnect bool,
-) error {
+func Run(serverAddr string, listenAddr string) error {
 	prometheus.MustRegister(sumWithdrawals)
 	prometheus.MustRegister(countWithdrawals)
 	prometheus.MustRegister(sumTransfers)
@@ -216,7 +191,7 @@ func Run(
 	defer cancel()
 
 	wg := sync.WaitGroup{}
-	if err := ReadEvents(ctx, cancel, &wg, batchSize, serverAddr, reconnect); err != nil {
+	if err := ReadEvents(ctx, cancel, &wg, serverAddr, listenAddr); err != nil {
 		return fmt.Errorf("error when starting the stream: %v", err)
 	}
 
