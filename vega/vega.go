@@ -299,7 +299,7 @@ func handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *eventspb.Bu
 		}
 
 		marketBestOfferPrice.With(labels).Set(sellPrice)
-		marketBestOfferPrice.With(labels).Set(buyPrice)
+		marketBestBidPrice.With(labels).Set(buyPrice)
 	}
 }
 
