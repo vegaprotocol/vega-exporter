@@ -7,7 +7,7 @@ Export useful metrics for Vega Protocol
 ## Exported metrics
 ```
 vega_withdrawals_sum_total{chain_id, asset, status, eth_tx}
-vega_withdrawals_sum_total{chain_id, asset, status, eth_tx}
+vega_withdrawals_count_total{chain_id, asset, status, eth_tx}
 
 vega_transfers_sum_total{chain_id, asset, status}
 vega_transfers_count_total{chain_id, asset, status}
