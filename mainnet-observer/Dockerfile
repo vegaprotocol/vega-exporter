@@ -1,4 +1,4 @@
-FROM alpine:3.16
+FROM alpine:3.17
 
 # Config
 ENV NETWORK=mainnet1
