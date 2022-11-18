@@ -16,8 +16,9 @@ var rootCmd = &cobra.Command{
 
 var (
 	streamOpts struct {
-		serverAddr string
-		listenAddr string
+		datanodeAddr   string
+		tendermintAddr string
+		listenAddr     string
 	}
 
 	streamCmd = &cobra.Command{
@@ -38,11 +39,12 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(streamCmd)
-	streamCmd.Flags().StringVarP(&streamOpts.serverAddr, "address", "a", "", "address of the grpc server")
+	streamCmd.Flags().StringVarP(&streamOpts.datanodeAddr, "datanode", "d", "localhost:3007", "address of datanode grpc")
+	streamCmd.Flags().StringVarP(&streamOpts.tendermintAddr, "tendermint", "t", "localhost:26657", "address of tendermint rpc")
 	streamCmd.Flags().StringVarP(&streamOpts.listenAddr, "listen", "l", ":8000", "address used to serve prometheus metrics")
 	streamCmd.MarkFlagRequired("address")
 }
 
 func runStream(cmd *cobra.Command, args []string) error {
-	return vega.Run(streamOpts.serverAddr, streamOpts.listenAddr)
+	return vega.Run(streamOpts.datanodeAddr, streamOpts.listenAddr)
 }
