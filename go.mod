@@ -1,6 +1,6 @@
 module code.vegaprotocol.io/vega-exporter
 
-go 1.18
+go 1.19
 
 require (
 	code.vegaprotocol.io/vega v0.62.1
@@ -9,7 +9,6 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.8.0
 	google.golang.org/grpc v1.50.0
-	google.golang.org/protobuf v1.28.1
 )
 
 require (
@@ -35,6 +34,7 @@ require (
 	golang.org/x/sys v0.0.0-20220818161305-2296e01440c6 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20220725144611-272f38e5d71b // indirect
+	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
