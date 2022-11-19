@@ -60,14 +60,14 @@ var sumLedgerMvt = prometheus.NewCounterVec(
 		Name: "vega_ledger_mvt_sum_total",
 		Help: "Total amount of ledger movement",
 	},
-	[]string{"chain_id", "asset", "type", "from_account_type", "to_account_type"},
+	[]string{"chain_id", "asset", "type", "from_account_type", "from_market", "to_account_type"},
 )
 var countLedgerMvt = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "vega_ledger_mvt_count_total",
 		Help: "Total count of ledger movement",
 	},
-	[]string{"chain_id", "asset", "type", "from_account_type", "to_account_type"},
+	[]string{"chain_id", "asset", "type", "from_account_type", "from_market", "to_account_type"},
 )
 
 var assetQuantum = prometheus.NewGaugeVec(
@@ -406,11 +406,18 @@ func handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventsp
 			fromAccountType := fromAccount.GetType().String()
 			toAccountType := toAccount.GetType().String()
 
+			market := ""
+			marketID := fromAccount.GetMarketId()
+			if marketID != "" {
+				market = getMarketName(ctx, conn, marketID)
+			}
+
 			labels := prometheus.Labels{
 				"chain_id":          chainID,
 				"asset":             asset,
 				"type":              ledgerEvtType,
 				"from_account_type": fromAccountType,
+				"from_market":       market,
 				"to_account_type":   toAccountType,
 			}
 
@@ -425,6 +432,7 @@ func handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventsp
 				Str("type", ledgerEvtType).
 				Str("from_account_type", fromAccountType).
 				Str("from_account", fromAccount.GetOwner()).
+				Str("from_market", market).
 				Str("to_account_type", toAccountType).
 				Str("to_account", toAccount.GetOwner()).
 				Str("asset", asset).
