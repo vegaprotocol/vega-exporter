@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"code.vegaprotocol.io/vega-exporter/vega"
+	"code.vegaprotocol.io/vega-exporter/app"
 	"github.com/spf13/cobra"
 )
 
@@ -46,5 +46,5 @@ func init() {
 }
 
 func runStream(cmd *cobra.Command, args []string) error {
-	return vega.Run(streamOpts.datanodeAddr, streamOpts.listenAddr)
+	return app.Run(streamOpts.datanodeAddr, streamOpts.listenAddr)
 }

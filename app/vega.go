@@ -1,4 +1,4 @@
-package vega
+package app
 
 import (
 	"context"
@@ -20,86 +20,116 @@ import (
 	eventspb "code.vegaprotocol.io/vega/protos/vega/events/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var sumWithdrawals = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "vega_withdrawals_sum_total",
-		Help: "Total amount of withdrawals",
-	},
-	[]string{"chain_id", "status", "asset", "eth_tx"},
-)
-var countWithdrawals = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "vega_withdrawals_count_total",
-		Help: "Total count of withdrawals",
-	},
-	[]string{"chain_id", "status", "asset", "eth_tx"},
-)
-var sumTransfers = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "vega_transfers_sum_total",
-		Help: "Total amount of transfers",
-	},
-	[]string{"chain_id", "status", "asset"},
-)
-var countTransfers = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "vega_transfers_count_total",
-		Help: "Total count of transfers",
-	},
-	[]string{"chain_id", "status", "asset"},
-)
+func (a *App) StartVegaObserver() error {
 
-var sumLedgerMvt = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "vega_ledger_mvt_sum_total",
-		Help: "Total amount of ledger movement",
-	},
-	[]string{"chain_id", "asset", "type", "from_account_type", "from_market", "to_account_type"},
-)
-var countLedgerMvt = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "vega_ledger_mvt_count_total",
-		Help: "Total count of ledger movement",
-	},
-	[]string{"chain_id", "asset", "type", "from_account_type", "from_market", "to_account_type"},
-)
+	a.prometheusCounters["sumWithdrawals"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_withdrawals_sum_total",
+			Help: "Total amount of withdrawals",
+		},
+		[]string{"chain_id", "status", "asset", "eth_tx"},
+	)
+	a.prometheusCounters["countWithdrawals"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_withdrawals_count_total",
+			Help: "Total count of withdrawals",
+		},
+		[]string{"chain_id", "status", "asset", "eth_tx"},
+	)
+	a.prometheusCounters["sumTransfers"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_transfers_sum_total",
+			Help: "Total amount of transfers",
+		},
+		[]string{"chain_id", "status", "asset"},
+	)
+	a.prometheusCounters["countTransfers"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_transfers_count_total",
+			Help: "Total count of transfers",
+		},
+		[]string{"chain_id", "status", "asset"},
+	)
 
-var assetQuantum = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "vega_asset_quantum",
-		Help: "Quantum value for each asset",
-	},
-	[]string{"chain_id", "asset"},
-)
-var assetDecimals = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "vega_asset_decimals",
-		Help: "Decimals for each asset",
-	},
-	[]string{"chain_id", "asset"},
-)
-var marketBestOfferPrice = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "vega_market_best_offer_price",
-		Help: "Best sell price per market",
-	},
-	[]string{"chain_id", "market"},
-)
-var marketBestBidPrice = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "vega_market_best_bid_price",
-		Help: "Best buy price per market",
-	},
-	[]string{"chain_id", "market"},
-)
+	a.prometheusCounters["sumLedgerMvt"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_ledger_mvt_sum_total",
+			Help: "Total amount of ledger movement",
+		},
+		[]string{"chain_id", "asset", "type", "from_account_type", "from_market", "to_account_type"},
+	)
+	a.prometheusCounters["countLedgerMvt"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_ledger_mvt_count_total",
+			Help: "Total count of ledger movement",
+		},
+		[]string{"chain_id", "asset", "type", "from_account_type", "from_market", "to_account_type"},
+	)
 
-func connect(ctx context.Context, serverAddr string) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
+	a.prometheusGauges["assetQuantum"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_asset_quantum",
+			Help: "Quantum value for each asset",
+		},
+		[]string{"chain_id", "asset"},
+	)
+	a.prometheusGauges["assetDecimals"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_asset_decimals",
+			Help: "Decimals for each asset",
+		},
+		[]string{"chain_id", "asset"},
+	)
+	a.prometheusGauges["marketBestOfferPrice"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_market_best_offer_price",
+			Help: "Best sell price per market",
+		},
+		[]string{"chain_id", "market"},
+	)
+	a.prometheusGauges["marketBestBidPrice"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_market_best_bid_price",
+			Help: "Best buy price per market",
+		},
+		[]string{"chain_id", "market"},
+	)
+
+	for _, counter := range a.prometheusCounters {
+		prometheus.MustRegister(counter)
+	}
+
+	for _, gauge := range a.prometheusGauges {
+		prometheus.MustRegister(gauge)
+	}
+
+	flag.Parse()
+
+	if len(a.serverAddr) <= 0 {
+		return fmt.Errorf("error: missing grpc server address")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	wg := sync.WaitGroup{}
+	log.Info().Msg("Started")
+	if err := a.readEvents(ctx, cancel, &wg, a.serverAddr, a.listenAddr); err != nil {
+		return fmt.Errorf("error when starting the stream: %v", err)
+	}
+
+	a.waitSig(ctx, cancel)
+	wg.Wait()
+
+	return nil
+}
+
+func (a *App) connect(ctx context.Context, serverAddr string) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
 	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, nil, err
@@ -130,14 +160,14 @@ func connect(ctx context.Context, serverAddr string) (*grpc.ClientConn, api.Core
 }
 
 // ReadEvents reads all the events from the server
-func ReadEvents(
+func (a *App) readEvents(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	wg *sync.WaitGroup,
 	serverAddr string,
 	listenAddr string,
 ) error {
-	conn, stream, err := connect(ctx, serverAddr)
+	conn, stream, err := a.connect(ctx, serverAddr)
 
 	if err != nil {
 		return fmt.Errorf("failed to connect to event stream: %w", err)
@@ -162,7 +192,7 @@ func ReadEvents(
 					break
 				}
 				for _, e := range o.Events {
-					handleEvents(ctx, conn, e)
+					a.handleEvents(ctx, conn, e)
 				}
 			}
 
@@ -173,7 +203,7 @@ func ReadEvents(
 				default:
 					time.Sleep(time.Second * 5)
 					log.Warn().Msg("Attempting to reconnect to the node")
-					conn, stream, err = connect(ctx, serverAddr)
+					conn, stream, err = a.connect(ctx, serverAddr)
 				}
 				if err == nil {
 					break
@@ -186,56 +216,20 @@ func ReadEvents(
 	return nil
 }
 
-// Run is the main function of `stream` package
-func Run(serverAddr string, listenAddr string) error {
-	prometheus.MustRegister(sumWithdrawals)
-	prometheus.MustRegister(countWithdrawals)
-	prometheus.MustRegister(sumTransfers)
-	prometheus.MustRegister(countTransfers)
-	prometheus.MustRegister(sumLedgerMvt)
-	prometheus.MustRegister(countLedgerMvt)
-	prometheus.MustRegister(assetQuantum)
-	prometheus.MustRegister(assetDecimals)
-	prometheus.MustRegister(marketBestBidPrice)
-	prometheus.MustRegister(marketBestOfferPrice)
-
-	flag.Parse()
-
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	if len(serverAddr) <= 0 {
-		return fmt.Errorf("error: missing grpc server address")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	wg := sync.WaitGroup{}
-	log.Info().Msg("Started")
-	if err := ReadEvents(ctx, cancel, &wg, serverAddr, listenAddr); err != nil {
-		return fmt.Errorf("error when starting the stream: %v", err)
-	}
-
-	WaitSig(ctx, cancel)
-	wg.Wait()
-
-	return nil
-}
-
-func handleEvents(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	switch e.Type {
 	case eventspb.BusEventType_BUS_EVENT_TYPE_WITHDRAWAL:
-		handleWithdrawals(ctx, conn, e)
+		a.handleWithdrawals(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_TRANSFER:
-		handleTransfers(ctx, conn, e)
+		a.handleTransfers(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA:
-		handleMarketData(ctx, conn, e)
+		a.handleMarketData(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS:
-		handleLedgerMovement(ctx, conn, e)
+		a.handleLedgerMovement(ctx, conn, e)
 	}
 }
 
-func getAssetInfo(
+func (a *App) getAssetInfo(
 	ctx context.Context, conn *grpc.ClientConn, assetID string, chainID string,
 ) (asset string, decimals uint64, quantum float64) {
 
@@ -254,17 +248,17 @@ func getAssetInfo(
 		if err != nil {
 			log.Error().Err(err).Msg("unable to parse asset quantum")
 		} else {
-			assetQuantum.With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(quantum)
+			a.prometheusGauges["assetQuantum"].With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(quantum)
 		}
-		assetDecimals.With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(float64(decimals))
+		a.prometheusGauges["assetDecimals"].With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(float64(decimals))
 	}
 	return
 }
 
-func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	w := e.GetWithdrawal()
 	chainID := e.GetChainId()
-	asset, decimals, _ := getAssetInfo(ctx, conn, w.Asset, chainID)
+	asset, decimals, _ := a.getAssetInfo(ctx, conn, w.Asset, chainID)
 
 	amount, err := strconv.ParseFloat(w.GetAmount(), 64)
 	amount = amount / math.Pow(10, float64(decimals))
@@ -282,8 +276,8 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 		"asset":    asset,
 		"eth_tx":   ethTx,
 	}
-	sumWithdrawals.With(labels).Add(amount)
-	countWithdrawals.With(labels).Inc()
+	a.prometheusCounters["sumWithdrawals"].With(labels).Add(amount)
+	a.prometheusCounters["countWithdrawals"].With(labels).Inc()
 
 	log.Debug().
 		Str("_id", e.Id).
@@ -302,7 +296,7 @@ func handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.B
 		Send()
 }
 
-func getMarketName(
+func (a *App) getMarketName(
 	ctx context.Context, conn *grpc.ClientConn, marketID string,
 ) (name string) {
 
@@ -318,7 +312,7 @@ func getMarketName(
 	return name
 }
 
-func handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+func (a *App) handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	md := e.GetMarketData()
 
 	if md.MarketTradingMode == proto.Market_TRADING_MODE_CONTINUOUS {
@@ -334,18 +328,18 @@ func handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *eventspb.Bu
 		}
 		labels := prometheus.Labels{
 			"chain_id": e.GetChainId(),
-			"market":   getMarketName(ctx, conn, md.Market),
+			"market":   a.getMarketName(ctx, conn, md.Market),
 		}
 
-		marketBestOfferPrice.With(labels).Set(sellPrice)
-		marketBestBidPrice.With(labels).Set(buyPrice)
+		a.prometheusGauges["marketBestOfferPrice"].With(labels).Set(sellPrice)
+		a.prometheusGauges["marketBestBidPrice"].With(labels).Set(buyPrice)
 	}
 }
 
-func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	t := e.GetTransfer()
 	chainID := e.GetChainId()
-	asset, decimals, _ := getAssetInfo(ctx, conn, t.Asset, chainID)
+	asset, decimals, _ := a.getAssetInfo(ctx, conn, t.Asset, chainID)
 
 	amount, err := strconv.ParseFloat(t.GetAmount(), 64)
 	if err != nil {
@@ -360,8 +354,8 @@ func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.Bus
 		"asset":    asset,
 	}
 
-	sumTransfers.With(labels).Add(amount)
-	countTransfers.With(labels).Inc()
+	a.prometheusCounters["sumTransfers"].With(labels).Add(amount)
+	a.prometheusCounters["countTransfers"].With(labels).Inc()
 
 	log.Debug().
 		Str("_id", e.Id).
@@ -381,7 +375,7 @@ func handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.Bus
 		Send()
 }
 
-func handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	tr := e.GetLedgerMovements()
 	chainID := e.GetChainId()
 
@@ -394,7 +388,7 @@ func handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventsp
 				log.Error().Err(err).Msg("unable to parse event err")
 				return
 			}
-			asset, decimals, _ := getAssetInfo(ctx, conn, fromAccount.GetAssetId(), chainID)
+			asset, decimals, _ := a.getAssetInfo(ctx, conn, fromAccount.GetAssetId(), chainID)
 			amount = amount / math.Pow(10, float64(decimals))
 
 			if err != nil {
@@ -409,7 +403,7 @@ func handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventsp
 			market := ""
 			marketID := fromAccount.GetMarketId()
 			if marketID != "" {
-				market = getMarketName(ctx, conn, marketID)
+				market = a.getMarketName(ctx, conn, marketID)
 			}
 
 			labels := prometheus.Labels{
@@ -421,8 +415,8 @@ func handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventsp
 				"to_account_type":   toAccountType,
 			}
 
-			sumLedgerMvt.With(labels).Add(amount)
-			countLedgerMvt.With(labels).Inc()
+			a.prometheusCounters["sumLedgerMvt"].With(labels).Add(amount)
+			a.prometheusCounters["countLedgerMvt"].With(labels).Inc()
 
 			log.Debug().
 				Str("_id", e.Id).
@@ -443,7 +437,7 @@ func handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventsp
 }
 
 // WaitSig waits until Terminate or interrupt event is received
-func WaitSig(ctx context.Context, cancel func()) {
+func (a *App) waitSig(ctx context.Context, cancel func()) {
 	gracefulStop := make(chan os.Signal, 1)
 	signal.Notify(gracefulStop, syscall.SIGTERM)
 	signal.Notify(gracefulStop, syscall.SIGINT)
