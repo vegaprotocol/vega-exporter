@@ -284,6 +284,7 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 		Str("block", e.Block).
 		Str("tx_hash", e.TxHash).
 		Str("chain_id", chainID).
+		Str("type", "WITHDRAWAL").
 		Str("asset", asset).
 		Float64("amount", amount).
 		Str("party_id", w.GetPartyId()).
@@ -361,6 +362,7 @@ func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eve
 		Str("_id", e.Id).
 		Str("block", e.Block).
 		Str("tx_hash", e.TxHash).
+		Str("type", "TRANSFER").
 		Str("chain_id", chainID).
 		Str("asset", asset).
 		Float64("amount", amount).
@@ -423,6 +425,7 @@ func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e
 				Str("block", e.Block).
 				Str("tx_hash", e.TxHash).
 				Str("chain_id", chainID).
+				Str("event_type", e.Type.String()).
 				Str("type", ledgerEvtType).
 				Str("from_account_type", fromAccountType).
 				Str("from_account", fromAccount.GetOwner()).
