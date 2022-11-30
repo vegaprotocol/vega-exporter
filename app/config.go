@@ -22,6 +22,6 @@ func Run(serverAddr string, listenAddr string) error {
 		prometheusCounters: make(map[string]*prometheus.CounterVec),
 		prometheusGauges:   make(map[string]*prometheus.GaugeVec),
 	}
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: true})
 	return app.StartVegaObserver()
 }
