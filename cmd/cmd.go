@@ -46,5 +46,5 @@ func init() {
 }
 
 func runStream(cmd *cobra.Command, args []string) error {
-	return app.Run(streamOpts.datanodeAddr, streamOpts.listenAddr)
+	return app.Run(streamOpts.datanodeAddr, streamOpts.tendermintAddr, streamOpts.listenAddr)
 }
