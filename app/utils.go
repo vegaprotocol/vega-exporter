@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"syscall"
 
 	datanodeV2 "code.vegaprotocol.io/vega/protos/data-node/api/v2"
+	"code.vegaprotocol.io/vega/protos/vega"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -31,6 +33,40 @@ func (a *App) getMarketName(
 		name = marketResp.GetMarket().GetTradableInstrument().GetInstrument().GetName()
 	}
 	return name
+}
+
+func (a *App) GetSettlementInfo(
+	ctx context.Context, conn *grpc.ClientConn, marketID string,
+) ([]*vega.PriceMonitoringBounds, error) {
+
+	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
+	// Price Monitoring Bounds
+	marketDataResp, err := tdsClient.GetLatestMarketData(ctx, &datanodeV2.GetLatestMarketDataRequest{MarketId: marketID})
+	if err != nil {
+		log.Error().Err(err).Str("market_id", marketID).Msg("unable to get market data")
+		return []*vega.PriceMonitoringBounds{}, err
+	}
+	priceMonitoringBounds := marketDataResp.GetMarketData().GetPriceMonitoringBounds()
+
+	// Settlement Data
+	marketResp, err := tdsClient.GetMarket(ctx, &datanodeV2.GetMarketRequest{MarketId: marketID})
+	if err != nil {
+		log.Error().Err(err).Str("market_id", marketID).Msg("unable to get market")
+		return []*vega.PriceMonitoringBounds{}, err
+	}
+	oracleSpecId := marketResp.GetMarket().GetTradableInstrument().GetInstrument().GetFuture().GetDataSourceSpecForSettlementData().GetId()
+
+	// Oracle Data
+	oracleDataResp, err := tdsClient.ListOracleData(ctx, &datanodeV2.ListOracleDataRequest{OracleSpecId: &oracleSpecId})
+	if err != nil {
+		log.Error().Err(err).Str("oracle_spec_id", oracleSpecId).Msg("unable to get oracle data")
+		return []*vega.PriceMonitoringBounds{}, err
+	}
+	for _, edge := range oracleDataResp.GetOracleData().GetEdges() {
+		fmt.Println(edge.GetNode().GetExternalData().GetData().GetData())
+	}
+
+	return priceMonitoringBounds, nil
 }
 
 func (a *App) getNodesNames(
@@ -65,6 +101,7 @@ func (a *App) getNodesNames(
 	nodeList := map[string]string{}
 	for _, v := range validators.Result.Validators {
 		for _, n := range nodesResp.GetNodes().Edges {
+			nodeList[n.GetNode().GetPubKey()] = n.GetNode().GetName()
 			if v.PubKey.Value == n.GetNode().GetTmPubKey() {
 				nodeList[v.Address] = n.GetNode().GetName()
 			}

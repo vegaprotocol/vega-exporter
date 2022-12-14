@@ -111,6 +111,8 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 		a.handleMarketData(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS:
 		a.handleLedgerMovement(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET:
+		a.handleSettlements(ctx, conn, e)
 	}
 }
 
@@ -280,4 +282,36 @@ func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e
 				Send()
 		}
 	}
+}
+
+func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	s := e.GetSettleMarket()
+	chainID := e.GetChainId()
+
+	market := s.GetMarketId()
+	if marketID := s.GetMarketId(); marketID != "" {
+		market = a.getMarketName(ctx, conn, marketID)
+	}
+
+	/*labels := prometheus.Labels{
+		"chain_id": chainID,
+		"status":   t.GetStatus().String(),
+		"asset":    asset,
+	}*/
+
+	//a.prometheusCounters["sumTransfers"].With(labels).Add(amount)
+	//a.prometheusCounters["countTransfers"].With(labels).Inc()
+	positionFactor := s.GetPositionFactor()
+	price := s.GetPrice()
+
+	log.Debug().
+		Str("_id", e.Id).
+		Str("event_type", e.Type.String()).
+		Str("block", e.Block).
+		Str("tx_hash", e.TxHash).
+		Str("chain_id", chainID).
+		Str("market", market).
+		Str("position_factor", positionFactor).
+		Str("price", price).
+		Send()
 }

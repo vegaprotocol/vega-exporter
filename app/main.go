@@ -20,6 +20,7 @@ type App struct {
 	tendermintAddr     string
 	prometheusCounters map[string]*prometheus.CounterVec
 	prometheusGauges   map[string]*prometheus.GaugeVec
+	nodeList           map[string]string
 }
 
 func Run(datanodeAddr, tendermintAddr, listenAddr string) error {
@@ -147,6 +148,22 @@ func (a *App) initMetrics() {
 		prometheus.CounterOpts{
 			Name: "vega_validator_signed_blocks_total",
 			Help: "Number of block signed per validator",
+		},
+		[]string{"address", "name"},
+	)
+
+	a.prometheusCounters["totalNodeVote"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_validator_node_vote_total",
+			Help: "Number of node votes submitted per validator",
+		},
+		[]string{"address", "name"},
+	)
+
+	a.prometheusCounters["totalChainEvent"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_validator_chain_event_total",
+			Help: "Number of node votes submitted per validator",
 		},
 		[]string{"address", "name"},
 	)
