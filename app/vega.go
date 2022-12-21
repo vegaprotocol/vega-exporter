@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"math"
@@ -15,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -27,7 +29,7 @@ func (a *App) StartVegaObserver(
 	conn, stream, err := a.connect(ctx)
 
 	if err != nil {
-		return fmt.Errorf("failed to connect to event stream: %w", err)
+		return fmt.Errorf("failed to connect to datanode event stream: %w", err)
 	}
 
 	wg.Add(1)
@@ -49,7 +51,8 @@ func (a *App) StartVegaObserver(
 					break
 				}
 				for _, e := range o.Events {
-					a.handleEvents(ctx, conn, e)
+					fmt.Println(e)
+					//a.handleEvents(ctx, conn, e)
 				}
 			}
 
@@ -71,13 +74,28 @@ func (a *App) StartVegaObserver(
 	return nil
 }
 
-func (a *App) connect(ctx context.Context) (*grpc.ClientConn, api.CoreService_ObserveEventBusClient, error) {
-	conn, err := grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, nil, err
+func (a *App) connect(ctx context.Context) (
+	conn *grpc.ClientConn,
+	stream api.CoreService_ObserveEventBusClient,
+	err error,
+) {
+	if a.datanodeInsecure {
+		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		config := &tls.Config{
+			InsecureSkipVerify: false,
+		}
+		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+		if err != nil {
+			return nil, nil, err
+		}
 	}
+
 	client := api.NewCoreServiceClient(conn)
-	stream, err := client.ObserveEventBus(ctx)
+	stream, err = client.ObserveEventBus(ctx)
 	if err != nil {
 		conn.Close()
 		return conn, stream, err
@@ -88,6 +106,7 @@ func (a *App) connect(ctx context.Context) (*grpc.ClientConn, api.CoreService_Ob
 		eventspb.BusEventType_BUS_EVENT_TYPE_TRANSFER,
 		eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA,
 		eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS,
+		eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET,
 	}
 	if err != nil {
 		return conn, stream, err
@@ -160,21 +179,34 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 
 func (a *App) handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	md := e.GetMarketData()
+	chainID := e.GetChainId()
 
 	if md.MarketTradingMode == proto.Market_TRADING_MODE_CONTINUOUS {
-		sellPrice, err := strconv.ParseFloat(md.BestOfferPrice, 64)
+		sellPrice, err := strconv.ParseFloat(md.GetBestOfferPrice(), 64)
 		if err != nil {
 			log.Error().Err(err).Msg("unable to parse event err")
 			return
 		}
-		buyPrice, err := strconv.ParseFloat(md.BestBidPrice, 64)
+		buyPrice, err := strconv.ParseFloat(md.GetBestBidPrice(), 64)
 		if err != nil {
 			log.Error().Err(err).Msg("unable to parse event err")
 			return
 		}
+
 		labels := prometheus.Labels{
-			"chain_id": e.GetChainId(),
-			"market":   a.getMarketName(ctx, conn, md.Market),
+			"chain_id":  chainID,
+			"market":    a.getMarketName(ctx, conn, md.GetMarket()),
+			"market_id": md.GetMarket(),
+		}
+		pmb := md.GetPriceMonitoringBounds()
+		if len(pmb) > 0 {
+			maxValidPrice, maxValidPriceErr := strconv.ParseFloat(pmb[0].GetMaxValidPrice(), 64)
+			minValidPrice, minValidPriceErr := strconv.ParseFloat(pmb[0].GetMinValidPrice(), 64)
+			if maxValidPriceErr == nil && minValidPriceErr == nil {
+				a.prometheusGauges["priceMonitoringBoundsMin"].With(labels).Set(minValidPrice)
+				a.prometheusGauges["priceMonitoringBoundsMax"].With(labels).Set(maxValidPrice)
+			}
+
 		}
 
 		a.prometheusGauges["marketBestOfferPrice"].With(labels).Set(sellPrice)
@@ -187,12 +219,12 @@ func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eve
 	chainID := e.GetChainId()
 	asset, decimals, _ := a.getAssetInfo(ctx, conn, t.Asset, chainID)
 
-	amount, err := strconv.ParseFloat(t.GetAmount(), 64)
+	rawAmount, err := strconv.ParseFloat(t.GetAmount(), 64)
 	if err != nil {
 		log.Error().Err(err).Msg("unable to parse event err")
 		return
 	}
-	amount = amount / math.Pow(10, float64(decimals))
+	amount := rawAmount / math.Pow(10, float64(decimals))
 
 	labels := prometheus.Labels{
 		"chain_id": chainID,
@@ -287,22 +319,35 @@ func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e
 func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	s := e.GetSettleMarket()
 	chainID := e.GetChainId()
-
-	market := s.GetMarketId()
-	if marketID := s.GetMarketId(); marketID != "" {
+	marketID := s.GetMarketId()
+	market := marketID
+	if marketID != "" {
 		market = a.getMarketName(ctx, conn, marketID)
 	}
 
-	/*labels := prometheus.Labels{
-		"chain_id": chainID,
-		"status":   t.GetStatus().String(),
-		"asset":    asset,
-	}*/
-
-	//a.prometheusCounters["sumTransfers"].With(labels).Add(amount)
-	//a.prometheusCounters["countTransfers"].With(labels).Inc()
 	positionFactor := s.GetPositionFactor()
-	price := s.GetPrice()
+	assetID, minValidPrice, maxValidPrice, err := a.GetMarketPriceMonitoringBounds(ctx, conn, marketID)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to parse event err")
+		return
+	}
+	asset, decimals, _ := a.getAssetInfo(ctx, conn, assetID, chainID)
+
+	rawPrice, err := strconv.ParseFloat(s.GetPrice(), 64)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to parse event")
+		return
+	}
+	price := rawPrice / math.Pow(10, float64(decimals))
+
+	labels := prometheus.Labels{
+		"chain_id":  chainID,
+		"asset":     asset,
+		"market_id": marketID,
+		"market":    market,
+	}
+
+	a.prometheusGauges["marketSettlementPrice"].With(labels).Set(price)
 
 	log.Debug().
 		Str("_id", e.Id).
@@ -311,7 +356,11 @@ func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *e
 		Str("tx_hash", e.TxHash).
 		Str("chain_id", chainID).
 		Str("market", market).
+		Str("market_id", marketID).
 		Str("position_factor", positionFactor).
-		Str("price", price).
+		Float64("price", price).
+		Str("asset", asset).
+		Float64("min_valid_price", minValidPrice).
+		Float64("max_valid_price", maxValidPrice).
 		Send()
 }

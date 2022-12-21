@@ -16,9 +16,12 @@ var rootCmd = &cobra.Command{
 
 var (
 	streamOpts struct {
-		datanodeAddr   string
-		tendermintAddr string
-		listenAddr     string
+		datanodeAddr       string
+		datanodeInsecure   bool
+		tendermintAddr     string
+		listenAddr         string
+		tendermintInsecure bool
+		datanodeV1         bool
 	}
 
 	streamCmd = &cobra.Command{
@@ -40,11 +43,21 @@ func Execute() {
 func init() {
 	rootCmd.AddCommand(streamCmd)
 	streamCmd.Flags().StringVarP(&streamOpts.datanodeAddr, "datanode", "d", "localhost:3007", "address of datanode grpc")
+	streamCmd.Flags().BoolVar(&streamOpts.datanodeInsecure, "datanode-insecure", false, "use insecure gprc datanode connection")
+	streamCmd.Flags().BoolVar(&streamOpts.datanodeV1, "datanode-v1", false, "use datanode v1 api instead of v2")
 	streamCmd.Flags().StringVarP(&streamOpts.tendermintAddr, "tendermint", "t", "localhost:26657", "address of tendermint rpc")
+	streamCmd.Flags().BoolVar(&streamOpts.tendermintInsecure, "tendermint-insecure", false, "use insecure tendermint connection")
 	streamCmd.Flags().StringVarP(&streamOpts.listenAddr, "listen", "l", ":8000", "address used to serve prometheus metrics")
 	streamCmd.MarkFlagRequired("address")
 }
 
 func runStream(cmd *cobra.Command, args []string) error {
-	return app.Run(streamOpts.datanodeAddr, streamOpts.tendermintAddr, streamOpts.listenAddr)
+	return app.Run(
+		streamOpts.datanodeAddr,
+		streamOpts.tendermintAddr,
+		streamOpts.listenAddr,
+		streamOpts.datanodeInsecure,
+		streamOpts.tendermintInsecure,
+		streamOpts.datanodeV1,
+	)
 }

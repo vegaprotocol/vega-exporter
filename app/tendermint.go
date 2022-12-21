@@ -45,7 +45,12 @@ func (a *App) StartTMObserver(
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-		a.nodeList, err = a.getNodesNames(ctx)
+		if a.datanodeV1 {
+			a.nodeList, err = a.getNodesNamesV1(ctx)
+		} else {
+			a.nodeList, err = a.getNodesNamesV2(ctx)
+		}
+
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to fetch node list")
 		}
