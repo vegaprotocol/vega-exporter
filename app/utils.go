@@ -2,8 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -11,11 +12,11 @@ import (
 	"strconv"
 	"syscall"
 
-	datanodeV2 "code.vegaprotocol.io/vega/protos/data-node/api/v2"
-	"code.vegaprotocol.io/vega/protos/vega"
+	datanode "code.vegaprotocol.io/vega/protos/data-node/api/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -23,8 +24,8 @@ func (a *App) getMarketName(
 	ctx context.Context, conn *grpc.ClientConn, marketID string,
 ) (name string) {
 
-	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
-	marketReq := &datanodeV2.GetMarketRequest{MarketId: marketID}
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	marketReq := &datanode.GetMarketRequest{MarketId: marketID}
 	marketResp, err := tdsClient.GetMarket(ctx, marketReq)
 	if err != nil {
 		log.Error().Err(err).Str("market_id", marketID).Msg("unable to fetch market")
@@ -35,56 +36,72 @@ func (a *App) getMarketName(
 	return name
 }
 
-func (a *App) GetSettlementInfo(
+func (a *App) GetMarketPriceMonitoringBounds(
 	ctx context.Context, conn *grpc.ClientConn, marketID string,
-) ([]*vega.PriceMonitoringBounds, error) {
+) (assetID string, minValidPrice, maxValidPrice float64, err error) {
 
-	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
 	// Price Monitoring Bounds
-	marketDataResp, err := tdsClient.GetLatestMarketData(ctx, &datanodeV2.GetLatestMarketDataRequest{MarketId: marketID})
+	marketDataResp, err := tdsClient.GetLatestMarketData(ctx, &datanode.GetLatestMarketDataRequest{MarketId: marketID})
 	if err != nil {
 		log.Error().Err(err).Str("market_id", marketID).Msg("unable to get market data")
-		return []*vega.PriceMonitoringBounds{}, err
+		return "", 0, 0, err
 	}
 	priceMonitoringBounds := marketDataResp.GetMarketData().GetPriceMonitoringBounds()
 
 	// Settlement Data
-	marketResp, err := tdsClient.GetMarket(ctx, &datanodeV2.GetMarketRequest{MarketId: marketID})
+	marketResp, err := tdsClient.GetMarket(ctx, &datanode.GetMarketRequest{MarketId: marketID})
 	if err != nil {
 		log.Error().Err(err).Str("market_id", marketID).Msg("unable to get market")
-		return []*vega.PriceMonitoringBounds{}, err
+		return "", 0, 0, err
 	}
-	oracleSpecId := marketResp.GetMarket().GetTradableInstrument().GetInstrument().GetFuture().GetDataSourceSpecForSettlementData().GetId()
 
-	// Oracle Data
-	oracleDataResp, err := tdsClient.ListOracleData(ctx, &datanodeV2.ListOracleDataRequest{OracleSpecId: &oracleSpecId})
+	assetID = marketResp.GetMarket().GetTradableInstrument().GetInstrument().GetId()
+	if len(priceMonitoringBounds) == 0 {
+		return "", 0, 0, errors.New("no price monitoring bounds found")
+	}
+	maxValidPrice, err = strconv.ParseFloat(priceMonitoringBounds[0].GetMaxValidPrice(), 64)
 	if err != nil {
-		log.Error().Err(err).Str("oracle_spec_id", oracleSpecId).Msg("unable to get oracle data")
-		return []*vega.PriceMonitoringBounds{}, err
+		return "", 0, 0, err
 	}
-	for _, edge := range oracleDataResp.GetOracleData().GetEdges() {
-		fmt.Println(edge.GetNode().GetExternalData().GetData().GetData())
+	minValidPrice, err = strconv.ParseFloat(priceMonitoringBounds[0].GetMinValidPrice(), 64)
+	if err != nil {
+		return "", 0, 0, err
 	}
-
-	return priceMonitoringBounds, nil
+	return assetID, minValidPrice, maxValidPrice, err
 }
 
 func (a *App) getNodesNames(
 	ctx context.Context,
-
-) (map[string]string, error) {
-	conn, err := grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
+) (nodeList map[string]string, err error) {
+	var conn *grpc.ClientConn
+	if a.datanodeInsecure {
+		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		config := &tls.Config{
+			InsecureSkipVerify: false,
+		}
+		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+		if err != nil {
+			return nil, err
+		}
 	}
-	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
-	nodesResp, err := tdsClient.ListNodes(ctx, &datanodeV2.ListNodesRequest{})
+
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	nodesResp, err := tdsClient.ListNodes(ctx, &datanode.ListNodesRequest{})
 
 	if err != nil {
 		log.Error().Err(err).Msg("unable to fetch nodes info")
 		return nil, err
 	}
-	validatorsResp, err := http.Get("http://" + a.tendermintAddr + "/validators")
+	scheme := "https://"
+	if a.tendermintInsecure {
+		scheme = "http://"
+	}
+	validatorsResp, err := http.Get(scheme + a.tendermintAddr + "/validators")
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +115,8 @@ func (a *App) getNodesNames(
 	if err != nil {
 		return nil, err
 	}
-	nodeList := map[string]string{}
+
+	nodeList = make(map[string]string)
 	for _, v := range validators.Result.Validators {
 		for _, n := range nodesResp.GetNodes().Edges {
 			nodeList[n.GetNode().GetPubKey()] = n.GetNode().GetName()
@@ -114,8 +132,8 @@ func (a *App) getAssetInfo(
 	ctx context.Context, conn *grpc.ClientConn, assetID string, chainID string,
 ) (asset string, decimals uint64, quantum float64) {
 
-	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
-	assetsReq := &datanodeV2.GetAssetRequest{AssetId: assetID}
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	assetsReq := &datanode.GetAssetRequest{AssetId: assetID}
 	assetResp, err := tdsClient.GetAsset(ctx, assetsReq)
 	if err != nil {
 		log.Error().Err(err).Msg("unable to fetch asset")
