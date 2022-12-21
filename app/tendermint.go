@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -11,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"github.com/tendermint/tendermint/rpc/jsonrpc/client"
+	jsonrpcTypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 )
 
 func (a *App) StartTMObserver(
@@ -37,11 +40,12 @@ func (a *App) StartTMObserver(
 			log.Error().Err(err).Str("query", query).Msg("Failed to subscribe to query")
 			return
 		}
-
+		tmclient.Subscribe(context.Background(), "tm.event = 'Tx' AND command.type = 'Node Vote'")
+		tmclient.Subscribe(context.Background(), "tm.event = 'Tx' AND command.type = 'Chain Event'")
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-		nodeList, err := a.getNodesNames(ctx)
+		a.nodeList, err = a.getNodesNames(ctx)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to fetch node list")
 		}
@@ -49,45 +53,21 @@ func (a *App) StartTMObserver(
 		for {
 			select {
 			case result := <-tmclient.ResponsesCh:
-				blockEvent := BlockEvent{}
-				err = json.Unmarshal(result.Result, &blockEvent)
+				tmEvent := TmEvent{}
+				err = json.Unmarshal(result.Result, &tmEvent)
 				if err != nil {
-					log.Error().Err(err).Msg("Failed to unmarshal response")
+					log.Error().Err(err).Msg("Failed to parse event")
 				}
 
-				// Proposer
-				address := blockEvent.Data.Value.Block.Header.ProposerAddress
-				validatorName := ""
-				if val, ok := nodeList[address]; ok {
-					validatorName = val
-				} else {
-					// refresh validator list
-					nodeList, err = a.getNodesNames(ctx)
+				switch tmEvent.Data.Type {
+				case "tendermint/event/NewBlock":
+					err = a.handleTendermintBlockEvent(ctx, result)
 					if err != nil {
-						log.Error().Err(err).Msg("Failed to fetch node list")
+						log.Error().Err(err).Msg("Failed to handle tendermint block event")
 					}
-					if val, ok := nodeList[address]; ok {
-						validatorName = val
-					}
-				}
-				a.prometheusCounters["totalProposedBlocks"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
 
-				// Signers
-				for _, s := range blockEvent.Data.Value.Block.LastCommit.Signatures {
-					signerName := ""
-					if val, ok := nodeList[address]; ok {
-						signerName = val
-					} else {
-						// refresh validator list
-						nodeList, err = a.getNodesNames(ctx)
-						if err != nil {
-							log.Error().Err(err).Msg("Failed to fetch node list")
-						}
-						if val, ok := nodeList[s.ValidatorAddress]; ok {
-							signerName = val
-						}
-					}
-					a.prometheusCounters["totalSignedBlocks"].With(prometheus.Labels{"address": address, "name": signerName}).Inc()
+				case "tendermint/event/Tx":
+					_ = a.handleTendermintTx(ctx, tmEvent)
 				}
 
 			case <-quit:
@@ -95,5 +75,83 @@ func (a *App) StartTMObserver(
 			}
 		}
 	}()
+	return nil
+}
+
+func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes.RPCResponse) (err error) {
+	blockEvent := BlockEvent{}
+	err = json.Unmarshal(event.Result, &blockEvent)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to unmarshal response")
+	}
+
+	// Proposer
+	address := blockEvent.Data.Value.Block.Header.ProposerAddress
+	validatorName := ""
+	if val, ok := a.nodeList[address]; ok {
+		validatorName = val
+	} else {
+		// refresh validator list
+		a.nodeList, err = a.getNodesNames(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to fetch node list")
+		}
+		if val, ok := a.nodeList[address]; ok {
+			validatorName = val
+		}
+	}
+	a.prometheusCounters["totalProposedBlocks"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
+
+	// Signers
+	for _, s := range blockEvent.Data.Value.Block.LastCommit.Signatures {
+		signerName := ""
+		if val, ok := a.nodeList[address]; ok {
+			signerName = val
+		} else {
+			// refresh validator list
+			a.nodeList, err = a.getNodesNames(ctx)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to fetch node list")
+			}
+			if val, ok := a.nodeList[s.ValidatorAddress]; ok {
+				signerName = val
+			}
+		}
+		a.prometheusCounters["totalSignedBlocks"].With(prometheus.Labels{"address": address, "name": signerName}).Inc()
+	}
+
+	return err
+}
+
+func (a *App) handleTendermintTx(ctx context.Context, e TmEvent) (err error) {
+	if len(e.Event.CommandType) == 0 {
+		return errors.New("no command.type found in transaction")
+	}
+
+	if len(e.Event.Submitter) == 0 {
+		return errors.New("no tx.submitter found in transaction")
+	}
+	address := e.Event.Submitter[0]
+	validatorName := ""
+	if val, ok := a.nodeList[address]; ok {
+		validatorName = val
+	} else {
+		// refresh validator list
+		a.nodeList, err = a.getNodesNames(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to fetch node list")
+		}
+		if val, ok := a.nodeList[address]; ok {
+			validatorName = val
+		}
+	}
+
+	switch e.Event.CommandType[0] {
+	case "Node Vote":
+		a.prometheusCounters["totalNodeVote"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
+	case "Chain Event":
+		fmt.Println("chain event")
+		a.prometheusCounters["totalChainEvent"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
+	}
 	return nil
 }

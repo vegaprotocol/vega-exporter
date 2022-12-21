@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"syscall"
 
-	datanodeV2 "code.vegaprotocol.io/vega/protos/data-node/api/v2"
+	datanode "code.vegaprotocol.io/vega/protos/data-node/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -21,9 +21,9 @@ func (a *App) getMarketName(
 	ctx context.Context, conn *grpc.ClientConn, marketID string,
 ) (name string) {
 
-	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
-	marketReq := &datanodeV2.GetMarketRequest{MarketId: marketID}
-	marketResp, err := tdsClient.GetMarket(ctx, marketReq)
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	marketReq := &datanode.MarketByIDRequest{MarketId: marketID}
+	marketResp, err := tdsClient.MarketByID(ctx, marketReq)
 	if err != nil {
 		log.Error().Err(err).Str("market_id", marketID).Msg("unable to fetch market")
 		name = marketID
@@ -41,8 +41,8 @@ func (a *App) getNodesNames(
 	if err != nil {
 		return nil, err
 	}
-	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
-	nodesResp, err := tdsClient.ListNodes(ctx, &datanodeV2.ListNodesRequest{})
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	nodesResp, err := tdsClient.GetNodes(ctx, &datanode.GetNodesRequest{})
 
 	if err != nil {
 		log.Error().Err(err).Msg("unable to fetch nodes info")
@@ -64,9 +64,9 @@ func (a *App) getNodesNames(
 	}
 	nodeList := map[string]string{}
 	for _, v := range validators.Result.Validators {
-		for _, n := range nodesResp.GetNodes().Edges {
-			if v.PubKey.Value == n.GetNode().GetTmPubKey() {
-				nodeList[v.Address] = n.GetNode().GetName()
+		for _, n := range nodesResp.GetNodes() {
+			if v.PubKey.Value == n.GetTmPubKey() {
+				nodeList[v.Address] = n.GetName()
 			}
 		}
 	}
@@ -77,9 +77,9 @@ func (a *App) getAssetInfo(
 	ctx context.Context, conn *grpc.ClientConn, assetID string, chainID string,
 ) (asset string, decimals uint64, quantum float64) {
 
-	tdsClient := datanodeV2.NewTradingDataServiceClient(conn)
-	assetsReq := &datanodeV2.GetAssetRequest{AssetId: assetID}
-	assetResp, err := tdsClient.GetAsset(ctx, assetsReq)
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	assetsReq := &datanode.AssetByIDRequest{Id: assetID}
+	assetResp, err := tdsClient.AssetByID(ctx, assetsReq)
 	if err != nil {
 		log.Error().Err(err).Msg("unable to fetch asset")
 		asset = assetID

@@ -21,6 +21,18 @@ type ValidatorsResponse struct {
 	} `json:"result"`
 }
 
+type TmEvent struct {
+	Query string `json:"query"`
+	Data  struct {
+		Type string `json:"type"`
+	} `json:"data"`
+	Event struct {
+		CommandType []string `json:"command.type"`
+		EventType   []string `json:"tm.event"`
+		Submitter   []string `json:"tx.submitter"`
+	} `json:"events"`
+}
+
 type BlockEvent struct {
 	Query string `json:"query"`
 	Data  struct {

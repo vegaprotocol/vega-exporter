@@ -87,7 +87,6 @@ func (a *App) connect(ctx context.Context) (*grpc.ClientConn, api.CoreService_Ob
 		eventspb.BusEventType_BUS_EVENT_TYPE_WITHDRAWAL,
 		eventspb.BusEventType_BUS_EVENT_TYPE_TRANSFER,
 		eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA,
-		eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS,
 	}
 	if err != nil {
 		return conn, stream, err
@@ -109,8 +108,6 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 		a.handleTransfers(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA:
 		a.handleMarketData(ctx, conn, e)
-	case eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS:
-		a.handleLedgerMovement(ctx, conn, e)
 	}
 }
 
@@ -218,66 +215,4 @@ func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eve
 		Str("oneoff", t.GetOneOff().String()).
 		Str("recurring", t.GetRecurring().String()).
 		Send()
-}
-
-func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
-	tr := e.GetLedgerMovements()
-	chainID := e.GetChainId()
-
-	for _, lm := range tr.LedgerMovements {
-		for _, entry := range lm.GetEntries() {
-			fromAccount := entry.GetFromAccount()
-			toAccount := entry.GetToAccount()
-			amount, err := strconv.ParseFloat(entry.GetAmount(), 64)
-			if err != nil {
-				log.Error().Err(err).Msg("unable to parse event err")
-				return
-			}
-			asset, decimals, _ := a.getAssetInfo(ctx, conn, fromAccount.GetAssetId(), chainID)
-			amount = amount / math.Pow(10, float64(decimals))
-
-			if err != nil {
-				log.Error().Err(err).Msg("unable to parse event")
-				return
-			}
-
-			ledgerEvtType := entry.GetType().String()
-			fromAccountType := fromAccount.GetType().String()
-			toAccountType := toAccount.GetType().String()
-
-			market := ""
-			marketID := fromAccount.GetMarketId()
-			if marketID != "" {
-				market = a.getMarketName(ctx, conn, marketID)
-			}
-
-			labels := prometheus.Labels{
-				"chain_id":          chainID,
-				"asset":             asset,
-				"type":              ledgerEvtType,
-				"from_account_type": fromAccountType,
-				"from_market":       market,
-				"to_account_type":   toAccountType,
-			}
-
-			a.prometheusCounters["sumLedgerMvt"].With(labels).Add(amount)
-			a.prometheusCounters["countLedgerMvt"].With(labels).Inc()
-
-			log.Debug().
-				Str("_id", e.Id).
-				Str("block", e.Block).
-				Str("tx_hash", e.TxHash).
-				Str("chain_id", chainID).
-				Str("event_type", e.Type.String()).
-				Str("type", ledgerEvtType).
-				Str("from_account_type", fromAccountType).
-				Str("from_account", fromAccount.GetOwner()).
-				Str("from_market", market).
-				Str("to_account_type", toAccountType).
-				Str("to_account", toAccount.GetOwner()).
-				Str("asset", asset).
-				Float64("amount", amount).
-				Send()
-		}
-	}
 }
