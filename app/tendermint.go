@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -150,7 +149,6 @@ func (a *App) handleTendermintTx(ctx context.Context, e TmEvent) (err error) {
 	case "Node Vote":
 		a.prometheusCounters["totalNodeVote"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
 	case "Chain Event":
-		fmt.Println("chain event")
 		a.prometheusCounters["totalChainEvent"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
 	}
 	return nil
