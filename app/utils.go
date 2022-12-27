@@ -65,6 +65,7 @@ func (a *App) getNodesNames(
 	nodeList := map[string]string{}
 	for _, v := range validators.Result.Validators {
 		for _, n := range nodesResp.GetNodes() {
+			nodeList[n.GetPubKey()] = n.GetName()
 			if v.PubKey.Value == n.GetTmPubKey() {
 				nodeList[v.Address] = n.GetName()
 			}
