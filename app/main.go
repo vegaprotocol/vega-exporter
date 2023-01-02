@@ -147,7 +147,7 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_proposed_blocks_total",
 			Help: "Number of block proposed per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
 	)
 
 	a.prometheusCounters["totalSignedBlocks"] = prometheus.NewCounterVec(
@@ -155,7 +155,7 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_signed_blocks_total",
 			Help: "Number of block signed per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
 	)
 
 	a.prometheusCounters["totalNodeVote"] = prometheus.NewCounterVec(
@@ -163,7 +163,7 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_node_vote_total",
 			Help: "Number of node votes submitted per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
 	)
 
 	a.prometheusCounters["totalChainEvent"] = prometheus.NewCounterVec(
@@ -171,7 +171,7 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_chain_event_total",
 			Help: "Number of node votes submitted per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
 	)
 
 	a.prometheusGauges["priceMonitoringBoundsMin"] = prometheus.NewGaugeVec(
@@ -196,6 +196,14 @@ func (a *App) initMetrics() {
 			Help: "Market price monitoring bound: maximal valid price",
 		},
 		[]string{"chain_id", "market", "market_id"},
+	)
+
+	a.prometheusGauges["partyCountTotal"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_party_count_total",
+			Help: "Number of parties in the network",
+		},
+		[]string{"chain_id"},
 	)
 
 	for _, counter := range a.prometheusCounters {
