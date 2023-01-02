@@ -106,6 +106,7 @@ func (a *App) connect(ctx context.Context) (
 		eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA,
 		eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS,
 		eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET,
+		eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE,
 	}
 	if err != nil {
 		return conn, stream, err
@@ -131,6 +132,8 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 		a.handleLedgerMovement(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET:
 		a.handleSettlements(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE:
+		a.handleTimeUpdate(ctx, conn, e)
 	}
 }
 
@@ -362,4 +365,15 @@ func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *e
 		Float64("min_valid_price", minValidPrice).
 		Float64("max_valid_price", maxValidPrice).
 		Send()
+}
+
+func (a *App) handleTimeUpdate(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	chainID := e.GetChainId()
+	partyCount := a.getPartiesCount(ctx, conn)
+
+	labels := prometheus.Labels{
+		"chain_id": chainID,
+	}
+
+	a.prometheusGauges["partyCountTotal"].With(labels).Set(float64(partyCount))
 }

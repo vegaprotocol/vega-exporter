@@ -154,6 +154,13 @@ func (a *App) getAssetInfo(
 	return
 }
 
+func (a *App) getPartiesCount(ctx context.Context, conn *grpc.ClientConn) (partyCount int) {
+
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	parties, _ := tdsClient.ListParties(ctx, &datanode.ListPartiesRequest{})
+	return len(parties.GetParties().GetEdges())
+}
+
 // WaitSig waits until Terminate or interrupt event is received
 func (a *App) waitSig(ctx context.Context, cancel func()) {
 	gracefulStop := make(chan os.Signal, 1)
