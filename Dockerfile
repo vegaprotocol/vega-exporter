@@ -6,6 +6,6 @@ WORKDIR /go/src/project
 ADD . .
 RUN env CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"' -o vega-exporter .
 
-FROM busybox:1.34
+FROM busybox:1.36
 COPY --from=builder /go/src/project/vega-exporter /
 ENTRYPOINT ["/vega-exporter"]
