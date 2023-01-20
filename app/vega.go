@@ -107,6 +107,7 @@ func (a *App) connect(ctx context.Context) (
 		eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS,
 		eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET,
 		eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE,
+		eventspb.BusEventType_BUS_EVENT_TYPE_REWARD_PAYOUT_EVENT,
 	}
 	if err != nil {
 		return conn, stream, err
@@ -134,6 +135,8 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 		a.handleSettlements(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE:
 		a.handleTimeUpdate(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_REWARD_PAYOUT_EVENT:
+		a.handleRewardPayout(ctx, conn, e)
 	}
 }
 
@@ -364,6 +367,42 @@ func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *e
 		Str("asset", asset).
 		Float64("min_valid_price", minValidPrice).
 		Float64("max_valid_price", maxValidPrice).
+		Send()
+}
+
+func (a *App) handleRewardPayout(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	rp := e.GetRewardPayout()
+	chainID := e.GetChainId()
+
+	labels := prometheus.Labels{
+		"chain_id":    chainID,
+		"asset":       rp.GetAsset(),
+		"reward_type": rp.GetRewardType(),
+	}
+
+	amount, err := strconv.ParseFloat(rp.GetAmount(), 64)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to parse event")
+		return
+	}
+
+	rewardPercentage, err := strconv.ParseFloat(rp.GetPercentOfTotalReward(), 64)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to parse event")
+		return
+	}
+
+	a.prometheusGauges["totalRewardPayout"].With(labels).Set(amount/rewardPercentage*100)
+	log.Debug().
+		Str("_id", e.Id).
+		Str("event_type", e.Type.String()).
+		Str("block", e.Block).
+		Str("tx_hash", e.TxHash).
+		Str("chain_id", chainID).
+		Str("amount", rp.GetAmount()).
+		Str("reward_percentage", rp.GetPercentOfTotalReward()).
+		Str("asset", rp.GetAsset()).
+		Str("reward_type", rp.GetRewardType()).
 		Send()
 }
 

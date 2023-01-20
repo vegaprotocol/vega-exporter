@@ -206,6 +206,14 @@ func (a *App) initMetrics() {
 		[]string{"chain_id"},
 	)
 
+	a.prometheusGauges["totalRewardPayout"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_total_reward_payout_nodecimal",
+			Help: "Total reward payout per asset, based on the percentOfTotalReward value and amount of each event.",
+		},
+		[]string{"chain_id", "reward_type", "asset"},
+	)
+
 	for _, counter := range a.prometheusCounters {
 		prometheus.MustRegister(counter)
 	}
