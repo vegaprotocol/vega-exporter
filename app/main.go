@@ -190,12 +190,12 @@ func (a *App) initMetrics() {
 		[]string{"chain_id", "market", "market_id"},
 	)
 
-	a.prometheusGauges["priceMonitoringBoundsMax"] = prometheus.NewGaugeVec(
+	a.prometheusGauges["marketSettlementPrice"] = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "vega_market_max_valid_price",
-			Help: "Market price monitoring bound: maximal valid price",
+			Name: "vega_market_settlement_price",
+			Help: "Market Settlement price per market",
 		},
-		[]string{"chain_id", "market", "market_id"},
+		[]string{"chain_id", "asset", "market", "market_id"},
 	)
 
 	a.prometheusGauges["partyCountTotal"] = prometheus.NewGaugeVec(
