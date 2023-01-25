@@ -17,21 +17,25 @@ import (
 
 type App struct {
 	datanodeAddr       string
+	datanodeInsecure   bool
 	tendermintAddr     string
+	tendermintInsecure bool
 	prometheusCounters map[string]*prometheus.CounterVec
 	prometheusGauges   map[string]*prometheus.GaugeVec
 	nodeList           map[string]string
 }
 
-func Run(datanodeAddr, tendermintAddr, listenAddr string) error {
+func Run(datanodeAddr, tendermintAddr, listenAddr string, datanodeInsecure, tendermintInsecure bool) error {
 	app := &App{
 		datanodeAddr:       datanodeAddr,
+		datanodeInsecure:   datanodeInsecure,
 		tendermintAddr:     tendermintAddr,
+		tendermintInsecure: tendermintInsecure,
 		prometheusCounters: make(map[string]*prometheus.CounterVec),
 		prometheusGauges:   make(map[string]*prometheus.GaugeVec),
 	}
 	app.initMetrics()
-	http.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
+	http.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{}))
 	go http.ListenAndServe(listenAddr, nil)
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: true})
@@ -121,19 +125,21 @@ func (a *App) initMetrics() {
 		},
 		[]string{"chain_id", "asset"},
 	)
+
 	a.prometheusGauges["marketBestOfferPrice"] = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "vega_market_best_offer_price",
 			Help: "Best sell price per market",
 		},
-		[]string{"chain_id", "market"},
+		[]string{"chain_id", "market", "market_id"},
 	)
+
 	a.prometheusGauges["marketBestBidPrice"] = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "vega_market_best_bid_price",
 			Help: "Best buy price per market",
 		},
-		[]string{"chain_id", "market"},
+		[]string{"chain_id", "market", "market_id"},
 	)
 
 	a.prometheusCounters["totalProposedBlocks"] = prometheus.NewCounterVec(
@@ -141,7 +147,7 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_proposed_blocks_total",
 			Help: "Number of block proposed per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
 	)
 
 	a.prometheusCounters["totalSignedBlocks"] = prometheus.NewCounterVec(
@@ -149,7 +155,7 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_signed_blocks_total",
 			Help: "Number of block signed per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
 	)
 
 	a.prometheusCounters["totalNodeVote"] = prometheus.NewCounterVec(
@@ -157,7 +163,7 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_node_vote_total",
 			Help: "Number of node votes submitted per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
 	)
 
 	a.prometheusCounters["totalChainEvent"] = prometheus.NewCounterVec(
@@ -165,7 +171,47 @@ func (a *App) initMetrics() {
 			Name: "vega_validator_chain_event_total",
 			Help: "Number of node votes submitted per validator",
 		},
-		[]string{"address", "name"},
+		[]string{"chain_id", "address", "name"},
+	)
+
+	a.prometheusGauges["priceMonitoringBoundsMin"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_market_min_valid_price",
+			Help: "Market price monitoring bound: minimal valid price",
+		},
+		[]string{"chain_id", "market", "market_id"},
+	)
+
+	a.prometheusGauges["priceMonitoringBoundsMax"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_market_max_valid_price",
+			Help: "Market price monitoring bound: maximal valid price",
+		},
+		[]string{"chain_id", "market", "market_id"},
+	)
+
+	a.prometheusGauges["marketSettlementPrice"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_market_settlement_price",
+			Help: "Market Settlement price per market",
+		},
+		[]string{"chain_id", "asset", "market", "market_id"},
+	)
+
+	a.prometheusGauges["partyCountTotal"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_party_count_total",
+			Help: "Number of parties in the network",
+		},
+		[]string{"chain_id"},
+	)
+
+	a.prometheusGauges["totalRewardPayout"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_total_reward_payout_nodecimal",
+			Help: "Total reward payout per asset, based on the percentOfTotalReward value and amount of each event.",
+		},
+		[]string{"chain_id", "reward_type", "asset"},
 	)
 
 	for _, counter := range a.prometheusCounters {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -34,14 +33,25 @@ func (a *App) StartTMObserver(
 		}
 		defer tmclient.Stop()
 
+		tmclient.Call(ctx, "status", nil)
+		statusResp := <-tmclient.ResponsesCh
+		status := TmStatusResp{}
+		err = json.Unmarshal(statusResp.Result, &status)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to parse tendermint status response")
+		}
+
+		chainID := status.NodeInfo.Network
+
 		query := "tm.event = 'NewBlock'"
-		err = tmclient.Subscribe(context.Background(), query)
+		err = tmclient.Subscribe(ctx, query)
 		if err != nil {
 			log.Error().Err(err).Str("query", query).Msg("Failed to subscribe to query")
 			return
 		}
-		tmclient.Subscribe(context.Background(), "tm.event = 'Tx' AND command.type = 'Node Vote'")
-		tmclient.Subscribe(context.Background(), "tm.event = 'Tx' AND command.type = 'Chain Event'")
+		tmclient.Subscribe(ctx, "tm.event = 'Tx' AND command.type = 'Node Vote'")
+		tmclient.Subscribe(ctx, "tm.event = 'Tx' AND command.type = 'Chain Event'")
+
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -61,13 +71,13 @@ func (a *App) StartTMObserver(
 
 				switch tmEvent.Data.Type {
 				case "tendermint/event/NewBlock":
-					err = a.handleTendermintBlockEvent(ctx, result)
+					err = a.handleTendermintBlockEvent(ctx, result, chainID)
 					if err != nil {
 						log.Error().Err(err).Msg("Failed to handle tendermint block event")
 					}
 
 				case "tendermint/event/Tx":
-					_ = a.handleTendermintTx(ctx, tmEvent)
+					_ = a.handleTendermintTx(ctx, tmEvent, chainID)
 				}
 
 			case <-quit:
@@ -78,7 +88,7 @@ func (a *App) StartTMObserver(
 	return nil
 }
 
-func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes.RPCResponse) (err error) {
+func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes.RPCResponse, chainID string) (err error) {
 	blockEvent := BlockEvent{}
 	err = json.Unmarshal(event.Result, &blockEvent)
 	if err != nil {
@@ -100,7 +110,12 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 			validatorName = val
 		}
 	}
-	a.prometheusCounters["totalProposedBlocks"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
+	proposerLabels := prometheus.Labels{
+		"chain_id": chainID,
+		"address":  address,
+		"name":     validatorName,
+	}
+	a.prometheusCounters["totalProposedBlocks"].With(proposerLabels).Inc()
 
 	// Signers
 	for _, s := range blockEvent.Data.Value.Block.LastCommit.Signatures {
@@ -117,13 +132,18 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 				signerName = val
 			}
 		}
-		a.prometheusCounters["totalSignedBlocks"].With(prometheus.Labels{"address": address, "name": signerName}).Inc()
+		signersLabels := prometheus.Labels{
+			"chain_id": chainID,
+			"address":  address,
+			"name":     signerName,
+		}
+		a.prometheusCounters["totalSignedBlocks"].With(signersLabels).Inc()
 	}
 
 	return err
 }
 
-func (a *App) handleTendermintTx(ctx context.Context, e TmEvent) (err error) {
+func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string) (err error) {
 	if len(e.Event.CommandType) == 0 {
 		return errors.New("no command.type found in transaction")
 	}
@@ -146,12 +166,17 @@ func (a *App) handleTendermintTx(ctx context.Context, e TmEvent) (err error) {
 		}
 	}
 
+	labels := prometheus.Labels{
+		"chain_id": chainID,
+		"address":  address,
+		"name":     validatorName,
+	}
+
 	switch e.Event.CommandType[0] {
 	case "Node Vote":
-		a.prometheusCounters["totalNodeVote"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
+		a.prometheusCounters["totalNodeVote"].With(labels).Inc()
 	case "Chain Event":
-		fmt.Println("chain event")
-		a.prometheusCounters["totalChainEvent"].With(prometheus.Labels{"address": address, "name": validatorName}).Inc()
+		a.prometheusCounters["totalChainEvent"].With(labels).Inc()
 	}
 	return nil
 }
