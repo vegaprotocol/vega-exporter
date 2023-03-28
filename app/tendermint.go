@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -64,12 +65,12 @@ func (a *App) StartTMObserver(
 			select {
 			case result := <-tmclient.ResponsesCh:
 				tmEvent := TmEvent{}
-				err = json.Unmarshal(result.Result, &tmEvent)
+				err = json.Unmarshal(result, &tmEvent)
 				if err != nil {
 					log.Error().Err(err).Msg("Failed to parse event")
 				}
 
-				switch tmEvent.Data.Type {
+				switch tmEvent.Result.Data.Type {
 				case "tendermint/event/NewBlock":
 					err = a.handleTendermintBlockEvent(ctx, result, chainID)
 					if err != nil {
@@ -77,6 +78,7 @@ func (a *App) StartTMObserver(
 					}
 
 				case "tendermint/event/Tx":
+					fmt.Printf("NODEVOTE/CHAINEVENT: %v\n", tmEvent)
 					_ = a.handleTendermintTx(ctx, tmEvent, chainID)
 				}
 
@@ -144,14 +146,16 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 }
 
 func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string) (err error) {
-	if len(e.Event.CommandType) == 0 {
+	var references map[string]string
+
+	if len(e.Result.Events.CommandType) == 0 {
 		return errors.New("no command.type found in transaction")
 	}
 
-	if len(e.Event.Submitter) == 0 {
+	if len(e.Result.Events.TxSubmitter) == 0 {
 		return errors.New("no tx.submitter found in transaction")
 	}
-	address := e.Event.Submitter[0]
+	address := e.Result.Events.TxSubmitter[0]
 	validatorName := ""
 	if val, ok := a.nodeList[address]; ok {
 		validatorName = val
@@ -165,16 +169,27 @@ func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string)
 			validatorName = val
 		}
 	}
-
 	labels := prometheus.Labels{
 		"chain_id": chainID,
 		"address":  address,
 		"name":     validatorName,
 	}
 
-	switch e.Event.CommandType[0] {
+	switch e.Result.Events.CommandType[0] {
 	case "Node Vote":
-		a.prometheusCounters["totalNodeVote"].With(labels).Inc()
+		fmt.Println("NODEVOTE:" + references[address] + "/" + address)
+		if _, ok := references[address]; !ok {
+			references[address] = e.Result.Events.CommandReference[0]
+			fmt.Println("NODEVOTE:OK")
+			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
+		}
+
+		if references[address] != e.Result.Events.CommandReference[0] {
+			fmt.Println("NODEVOTE:OK")
+			references[address] = e.Result.Events.CommandReference[0]
+			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
+		}
+
 	case "Chain Event":
 		a.prometheusCounters["totalChainEvent"].With(labels).Inc()
 	}
