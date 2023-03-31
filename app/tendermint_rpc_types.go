@@ -22,40 +22,36 @@ type ValidatorsResponse struct {
 }
 
 type TmEvent struct {
-	Jsonrpc string `json:"jsonrpc"`
-	ID      int    `json:"id"`
-	Result  struct {
-		Query string `json:"query"`
-		Data  struct {
-			Type  string `json:"type"`
-			Value struct {
-				TxResult struct {
-					Height string `json:"height"`
-					Index  int    `json:"index"`
-					Tx     string `json:"tx"`
-					Result struct {
-						Events []struct {
-							Type       string `json:"type"`
-							Attributes []struct {
-								Key   string `json:"key"`
-								Value string `json:"value"`
-								Index bool   `json:"index"`
-							} `json:"attributes"`
-						} `json:"events"`
-					} `json:"result"`
-				} `json:"TxResult"`
-			} `json:"value"`
-		} `json:"data"`
-		Events struct {
-			TxHash           []string `json:"tx.hash"`
-			TxHeight         []string `json:"tx.height"`
-			TxSubmitter      []string `json:"tx.submitter"`
-			CommandType      []string `json:"command.type"`
-			CommandMarket    []string `json:"command.market"`
-			CommandReference []string `json:"command.reference"`
-			TmEvent          []string `json:"tm.event"`
-		} `json:"events"`
-	} `json:"result"`
+	Query string `json:"query"`
+	Data  struct {
+		Type  string `json:"type"`
+		Value struct {
+			TxResult struct {
+				Height string `json:"height"`
+				Index  int    `json:"index"`
+				Tx     string `json:"tx"`
+				Result struct {
+					Events []struct {
+						Type       string `json:"type"`
+						Attributes []struct {
+							Key   string `json:"key"`
+							Value string `json:"value"`
+							Index bool   `json:"index"`
+						} `json:"attributes"`
+					} `json:"events"`
+				} `json:"result"`
+			} `json:"TxResult"`
+		} `json:"value"`
+	} `json:"data"`
+	Events struct {
+		TxHash           []string `json:"tx.hash"`
+		TxHeight         []string `json:"tx.height"`
+		TxSubmitter      []string `json:"tx.submitter"`
+		CommandType      []string `json:"command.type"`
+		CommandMarket    []string `json:"command.market"`
+		CommandReference []string `json:"command.reference"`
+		TmEvent          []string `json:"tm.event"`
+	} `json:"events"`
 }
 
 type TmStatusResp struct {

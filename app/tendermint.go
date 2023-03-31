@@ -70,7 +70,7 @@ func (a *App) StartTMObserver(
 					log.Error().Err(err).Msg("Failed to parse event")
 				}
 
-				switch tmEvent.Result.Data.Type {
+				switch tmEvent.Data.Type {
 				case "tendermint/event/NewBlock":
 					err = a.handleTendermintBlockEvent(ctx, result, chainID)
 					if err != nil {
@@ -146,16 +146,16 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 }
 
 func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string) (err error) {
-	var references map[string]string
+	references := make(map[string]string)
 
-	if len(e.Result.Events.CommandType) == 0 {
+	if len(e.Events.CommandType) == 0 {
 		return errors.New("no command.type found in transaction")
 	}
 
-	if len(e.Result.Events.TxSubmitter) == 0 {
+	if len(e.Events.TxSubmitter) == 0 {
 		return errors.New("no tx.submitter found in transaction")
 	}
-	address := e.Result.Events.TxSubmitter[0]
+	address := e.Events.TxSubmitter[0]
 	validatorName := ""
 	if val, ok := a.nodeList[address]; ok {
 		validatorName = val
@@ -175,18 +175,23 @@ func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string)
 		"name":     validatorName,
 	}
 
-	switch e.Result.Events.CommandType[0] {
+	log.Debug().
+		Str("tm_event_type", e.Data.Type).
+		Str("TxReference", e.Events.CommandReference[0]).
+		Str("address", address).
+		Str("validator_name", validatorName).
+		Str("command_type", e.Events.CommandType[0]).
+		Send()
+
+	switch e.Events.CommandType[0] {
 	case "Node Vote":
-		fmt.Println("NODEVOTE:" + references[address] + "/" + address)
 		if _, ok := references[address]; !ok {
-			references[address] = e.Result.Events.CommandReference[0]
-			fmt.Println("NODEVOTE:OK")
+			references[address] = e.Events.CommandReference[0]
 			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
 		}
 
-		if references[address] != e.Result.Events.CommandReference[0] {
-			fmt.Println("NODEVOTE:OK")
-			references[address] = e.Result.Events.CommandReference[0]
+		if references[address] != e.Events.CommandReference[0] {
+			references[address] = e.Events.CommandReference[0]
 			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
 		}
 
