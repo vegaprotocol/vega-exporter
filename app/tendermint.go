@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -78,7 +77,6 @@ func (a *App) StartTMObserver(
 					}
 
 				case "tendermint/event/Tx":
-					fmt.Printf("NODEVOTE/CHAINEVENT: %v\n", tmEvent)
 					_ = a.handleTendermintTx(ctx, tmEvent, chainID)
 				}
 
@@ -175,24 +173,24 @@ func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string)
 		"name":     validatorName,
 	}
 
-	log.Debug().
+	logEvent := log.Debug().
 		Str("tm_event_type", e.Data.Type).
-		Str("TxReference", e.Events.CommandReference[0]).
 		Str("address", address).
 		Str("validator_name", validatorName).
-		Str("command_type", e.Events.CommandType[0]).
-		Send()
+		Str("command_type", e.Events.CommandType[0])
 
 	switch e.Events.CommandType[0] {
 	case "Node Vote":
 		if _, ok := references[address]; !ok {
 			references[address] = e.Events.CommandReference[0]
 			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
+			logEvent.Str("TxReference", e.Events.CommandReference[0]).Send()
 		}
 
 		if references[address] != e.Events.CommandReference[0] {
 			references[address] = e.Events.CommandReference[0]
 			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
+			logEvent.Send()
 		}
 
 	case "Chain Event":
