@@ -174,27 +174,33 @@ func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string)
 	}
 
 	logEvent := log.Debug().
-		Str("tm_event_type", e.Data.Type).
+		Str("tmEventType", e.Data.Type).
 		Str("address", address).
-		Str("validator_name", validatorName).
-		Str("command_type", e.Events.CommandType[0])
+		Str("validatorName", validatorName).
+		Str("commandType", e.Events.CommandType[0])
 
 	switch e.Events.CommandType[0] {
 	case "Node Vote":
+		logEvent.Str("txReference", e.Events.CommandReference[0])
+		logEvent.Bool("counted", false)
+
 		if _, ok := references[address]; !ok {
 			references[address] = e.Events.CommandReference[0]
 			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
-			logEvent.Str("TxReference", e.Events.CommandReference[0]).Send()
+			logEvent.Bool("counted", true)
 		}
 
 		if references[address] != e.Events.CommandReference[0] {
 			references[address] = e.Events.CommandReference[0]
 			a.prometheusCounters["totalNodeVote"].With(labels).Inc()
-			logEvent.Send()
+			logEvent.Bool("counted", true)
 		}
+
+		logEvent.Send()
 
 	case "Chain Event":
 		a.prometheusCounters["totalChainEvent"].With(labels).Inc()
+		logEvent.Send()
 	}
 	return nil
 }
