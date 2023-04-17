@@ -108,6 +108,7 @@ func (a *App) connect(ctx context.Context) (
 		eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET,
 		eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE,
 		eventspb.BusEventType_BUS_EVENT_TYPE_REWARD_PAYOUT_EVENT,
+		eventspb.BusEventType_BUS_EVENT_TYPE_PROPOSAL,
 	}
 	if err != nil {
 		return conn, stream, err
@@ -137,6 +138,8 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 		a.handleTimeUpdate(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_REWARD_PAYOUT_EVENT:
 		a.handleRewardPayout(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_PROPOSAL:
+		a.handleProposal(ctx, conn, e)
 	}
 }
 
@@ -392,7 +395,7 @@ func (a *App) handleRewardPayout(ctx context.Context, conn *grpc.ClientConn, e *
 		return
 	}
 
-	a.prometheusGauges["totalRewardPayout"].With(labels).Set(amount/rewardPercentage*100)
+	a.prometheusGauges["totalRewardPayout"].With(labels).Set(amount / rewardPercentage * 100)
 	log.Debug().
 		Str("_id", e.Id).
 		Str("event_type", e.Type.String()).
@@ -415,4 +418,30 @@ func (a *App) handleTimeUpdate(ctx context.Context, conn *grpc.ClientConn, e *ev
 	}
 
 	a.prometheusGauges["partyCountTotal"].With(labels).Set(float64(partyCount))
+}
+
+func (a *App) handleProposal(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	chainID := e.GetChainId()
+	p := e.GetProposal()
+
+	labels := prometheus.Labels{
+		"chain_id": chainID,
+		"state":    p.State.String(),
+	}
+
+	a.prometheusCounters["proposals"].With(labels).Inc()
+
+	log.Debug().
+		Str("_id", e.Id).
+		Str("event_type", e.Type.String()).
+		Str("block", e.Block).
+		Str("tx_hash", e.TxHash).
+		Str("chain_id", chainID).
+		Str("proposal_id", p.GetId()).
+		Str("proposal_party_id", p.GetPartyId()).
+		Str("propsal_state", p.GetState().String()).
+		Int64("proposal_timestamp", p.GetTimestamp()).
+		Str("proposal_terms", p.GetTerms().String()).
+		Str("proposal_rationale", p.GetRationale().String()).
+		Send()
 }

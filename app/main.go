@@ -174,6 +174,14 @@ func (a *App) initMetrics() {
 		[]string{"chain_id", "address", "name"},
 	)
 
+	a.prometheusCounters["proposals"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_proposals_count_total",
+			Help: "Number of proposals on the network",
+		},
+		[]string{"chain_id"},
+	)
+
 	a.prometheusGauges["priceMonitoringBoundsMin"] = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "vega_market_min_valid_price",
