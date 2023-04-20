@@ -158,6 +158,7 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 	if w.GetTxHash() != "" {
 		ethTx = "true"
 	}
+
 	labels := prometheus.Labels{
 		"chain_id": chainID,
 		"status":   w.GetStatus().String(),
@@ -170,7 +171,8 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 	log.Debug().
 		Str("_id", e.Id).
 		Str("block", e.Block).
-		Str("tx_hash", e.TxHash).
+		Str("vega_tx_hash", e.TxHash).
+		Str("eth_tx_hash", w.GetTxHash()).
 		Str("chain_id", chainID).
 		Str("type", "WITHDRAWAL").
 		Str("asset", asset).
