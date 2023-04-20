@@ -41,15 +41,3 @@ jobs:
 
       - name: Exporter image digest
         run: echo ${{ steps.exporter_docker_build.outputs.digest }}
-
-      - name: Build mainnet-observer
-        id: observer_docker_build
-        uses: docker/build-push-action@v3
-        with:
-          context: mainnet-observer
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/mainnet-observer:${{ steps.vars.outputs.tag }}
-
-      - name: Mainnet-observer image digest
-        run: echo ${{ steps.observer_docker_build.outputs.digest }}
