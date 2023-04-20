@@ -87,6 +87,8 @@ func (a *App) connect(ctx context.Context) (*grpc.ClientConn, api.CoreService_Ob
 		eventspb.BusEventType_BUS_EVENT_TYPE_WITHDRAWAL,
 		eventspb.BusEventType_BUS_EVENT_TYPE_TRANSFER,
 		eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA,
+		eventspb.BusEventType_BUS_EVENT_TYPE_PROPOSAL,
+		eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE,
 	}
 	if err != nil {
 		return conn, stream, err
@@ -108,6 +110,10 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 		a.handleTransfers(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA:
 		a.handleMarketData(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE:
+		a.handleTimeUpdate(ctx, conn, e)
+	case eventspb.BusEventType_BUS_EVENT_TYPE_PROPOSAL:
+		a.handleProposal(ctx, conn, e)
 	}
 }
 
@@ -138,7 +144,8 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 	log.Debug().
 		Str("_id", e.Id).
 		Str("block", e.Block).
-		Str("tx_hash", e.TxHash).
+		Str("vega_tx_hash", e.TxHash).
+		Str("eth_tx_hash", w.GetTxHash()).
 		Str("chain_id", chainID).
 		Str("type", "WITHDRAWAL").
 		Str("asset", asset).
@@ -214,5 +221,42 @@ func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eve
 		Str("status", t.GetStatus().String()).
 		Str("oneoff", t.GetOneOff().String()).
 		Str("recurring", t.GetRecurring().String()).
+		Send()
+}
+
+func (a *App) handleTimeUpdate(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	chainID := e.GetChainId()
+	partyCount := a.getPartiesCount(ctx, conn)
+
+	labels := prometheus.Labels{
+		"chain_id": chainID,
+	}
+
+	a.prometheusGauges["partyCountTotal"].With(labels).Set(float64(partyCount))
+}
+
+func (a *App) handleProposal(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
+	chainID := e.GetChainId()
+	p := e.GetProposal()
+
+	labels := prometheus.Labels{
+		"chain_id": chainID,
+		"state":    p.State.String(),
+	}
+
+	a.prometheusCounters["proposals"].With(labels).Inc()
+
+	log.Debug().
+		Str("_id", e.Id).
+		Str("event_type", e.Type.String()).
+		Str("block", e.Block).
+		Str("tx_hash", e.TxHash).
+		Str("chain_id", chainID).
+		Str("proposal_id", p.GetId()).
+		Str("proposal_party_id", p.GetPartyId()).
+		Str("propsal_state", p.GetState().String()).
+		Int64("proposal_timestamp", p.GetTimestamp()).
+		Str("proposal_terms", p.GetTerms().String()).
+		Str("proposal_rationale", p.GetRationale().String()).
 		Send()
 }

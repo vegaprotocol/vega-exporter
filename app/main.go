@@ -168,6 +168,22 @@ func (a *App) initMetrics() {
 		[]string{"address", "name"},
 	)
 
+	a.prometheusCounters["proposals"] = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vega_proposals_count_total",
+			Help: "Number of proposals on the network",
+		},
+		[]string{"chain_id"},
+	)
+
+	a.prometheusGauges["partyCountTotal"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_party_count_total",
+			Help: "Number of parties in the network",
+		},
+		[]string{"chain_id"},
+	)
+
 	for _, counter := range a.prometheusCounters {
 		prometheus.MustRegister(counter)
 	}

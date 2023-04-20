@@ -115,3 +115,10 @@ func (a *App) waitSig(ctx context.Context, cancel func()) {
 		return
 	}
 }
+
+func (a *App) getPartiesCount(ctx context.Context, conn *grpc.ClientConn) (partyCount int) {
+
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	parties, _ := tdsClient.Parties(ctx, &datanode.PartiesRequest{})
+	return len(parties.GetParties())
+}
