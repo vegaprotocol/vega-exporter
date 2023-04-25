@@ -56,7 +56,7 @@ func (a *App) GetMarketPriceMonitoringBounds(
 		return "", 0, 0, err
 	}
 
-	assetID = marketResp.GetMarket().GetTradableInstrument().GetInstrument().GetId()
+	assetID = marketResp.GetMarket().GetTradableInstrument().GetInstrument().GetFuture().GetSettlementAsset()
 	if len(priceMonitoringBounds) == 0 {
 		return "", 0, 0, errors.New("no price monitoring bounds found")
 	}
