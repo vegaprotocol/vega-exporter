@@ -7,8 +7,6 @@ import (
 	"os"
 	"sync"
 
-	"flag"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -17,20 +15,24 @@ import (
 
 type App struct {
 	datanodeAddr       string
-	datanodeInsecure   bool
+	datanodeTls        bool
 	tendermintAddr     string
-	tendermintInsecure bool
+	tendermintTls      bool
+	ethereumRpcAddr    string
+	assetPoolContract  string
 	prometheusCounters map[string]*prometheus.CounterVec
 	prometheusGauges   map[string]*prometheus.GaugeVec
 	nodeList           map[string]string
 }
 
-func Run(datanodeAddr, tendermintAddr, listenAddr string, datanodeInsecure, tendermintInsecure bool) error {
+func Run(datanodeAddr, tendermintAddr, ethereumRpcAddr, assetPoolContract, listenAddr string, datanodeTls, tendermintTls bool) error {
 	app := &App{
 		datanodeAddr:       datanodeAddr,
-		datanodeInsecure:   datanodeInsecure,
+		datanodeTls:        datanodeTls,
 		tendermintAddr:     tendermintAddr,
-		tendermintInsecure: tendermintInsecure,
+		tendermintTls:      tendermintTls,
+		ethereumRpcAddr:    ethereumRpcAddr,
+		assetPoolContract:  assetPoolContract,
 		prometheusCounters: make(map[string]*prometheus.CounterVec),
 		prometheusGauges:   make(map[string]*prometheus.GaugeVec),
 	}
@@ -39,8 +41,6 @@ func Run(datanodeAddr, tendermintAddr, listenAddr string, datanodeInsecure, tend
 	go http.ListenAndServe(listenAddr, nil)
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: true})
-
-	flag.Parse()
 	if len(app.datanodeAddr) <= 0 {
 		return fmt.Errorf("error: missing datanode grpc server address")
 	}
@@ -55,10 +55,16 @@ func Run(datanodeAddr, tendermintAddr, listenAddr string, datanodeInsecure, tend
 	log.Info().Msg("Started")
 
 	if err := app.StartVegaObserver(ctx, cancel, &wg); err != nil {
-		return fmt.Errorf("error when starting the stream: %v", err)
+		log.Error().Err(err).Msg("error when starting the stream")
+		return err
 	}
 	if err := app.StartTMObserver(ctx, cancel, &wg); err != nil {
-		return fmt.Errorf("error when observing tendermint: %v", err)
+		log.Error().Err(err).Msg("error when observing tendermint")
+		return err
+	}
+	if err := app.StartAssetPoolWatch(ctx, cancel, &wg); err != nil {
+		log.Error().Err(err).Msg("error when observing tendermint")
+		return err
 	}
 
 	app.waitSig(ctx, cancel)
@@ -212,6 +218,14 @@ func (a *App) initMetrics() {
 			Help: "Number of parties in the network",
 		},
 		[]string{"chain_id"},
+	)
+
+	a.prometheusGauges["erc20AssetBalance"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_erc20_bridge_balance_total",
+			Help: "ERC20 Asset balance on the bridge",
+		},
+		[]string{"asset"},
 	)
 
 	a.prometheusGauges["totalRewardPayout"] = prometheus.NewGaugeVec(

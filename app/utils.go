@@ -75,16 +75,16 @@ func (a *App) getNodesNames(
 	ctx context.Context,
 ) (nodeList map[string]string, err error) {
 	var conn *grpc.ClientConn
-	if a.datanodeInsecure {
-		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			return nil, err
-		}
-	} else {
+	if a.datanodeTls {
 		config := &tls.Config{
 			InsecureSkipVerify: false,
 		}
 		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, err
 		}
@@ -97,9 +97,9 @@ func (a *App) getNodesNames(
 		log.Error().Err(err).Msg("unable to fetch nodes info")
 		return nil, err
 	}
-	scheme := "https://"
-	if a.tendermintInsecure {
-		scheme = "http://"
+	scheme := "http://"
+	if a.tendermintTls {
+		scheme = "https://"
 	}
 	validatorsResp, err := http.Get(scheme + a.tendermintAddr + "/validators")
 	if err != nil {

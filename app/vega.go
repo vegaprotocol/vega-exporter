@@ -78,16 +78,16 @@ func (a *App) connect(ctx context.Context) (
 	stream api.CoreService_ObserveEventBusClient,
 	err error,
 ) {
-	if a.datanodeInsecure {
-		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			return nil, nil, err
-		}
-	} else {
+	if a.datanodeTls {
 		config := &tls.Config{
 			InsecureSkipVerify: false,
 		}
 		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		conn, err = grpc.Dial(a.datanodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, nil, err
 		}

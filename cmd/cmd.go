@@ -8,25 +8,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// rootCmd represents the base command when called without any subcommands
-var rootCmd = &cobra.Command{
-	Use:   "vega-exporter",
-	Short: "Prometheus Exporter for Vega Protocol",
-}
-
 var (
-	streamOpts struct {
-		datanodeAddr       string
-		datanodeInsecure   bool
-		tendermintAddr     string
-		listenAddr         string
-		tendermintInsecure bool
+	runOpts struct {
+		datanodeAddr      string
+		datanodeTls       bool
+		tendermintAddr    string
+		listenAddr        string
+		tendermintTls     bool
+		ethereumRpcAddr   string
+		assetPoolContract string
 	}
 
-	streamCmd = &cobra.Command{
-		Use:   "run",
-		Short: "Stream events from vega node",
-		RunE:  runStream,
+	rootCmd = &cobra.Command{
+		Use:   "vega-exporter",
+		Short: "Prometheus Exporter for Vega Protocol",
+		RunE:  run,
 	}
 )
 
@@ -40,21 +36,25 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(streamCmd)
-	streamCmd.Flags().StringVarP(&streamOpts.datanodeAddr, "datanode", "d", "localhost:3007", "address of datanode grpc")
-	streamCmd.Flags().BoolVar(&streamOpts.datanodeInsecure, "datanode-insecure", false, "use insecure gprc datanode connection")
-	streamCmd.Flags().StringVarP(&streamOpts.tendermintAddr, "tendermint", "t", "localhost:26657", "address of tendermint rpc")
-	streamCmd.Flags().BoolVar(&streamOpts.tendermintInsecure, "tendermint-insecure", false, "use insecure tendermint connection")
-	streamCmd.Flags().StringVarP(&streamOpts.listenAddr, "listen", "l", ":8000", "address used to serve prometheus metrics")
-	streamCmd.MarkFlagRequired("address")
+	flags := rootCmd.Flags()
+
+	flags.StringVarP(&runOpts.datanodeAddr, "datanode", "d", "localhost:3007", "address of datanode grpc")
+	flags.BoolVar(&runOpts.datanodeTls, "datanode-tls", false, "use Tls gprc datanode connection")
+	flags.StringVarP(&runOpts.tendermintAddr, "tendermint", "t", "localhost:26657", "address of tendermint rpc")
+	flags.BoolVar(&runOpts.tendermintTls, "tendermint-tls", false, "use Tls tendermint connection")
+	flags.StringVarP(&runOpts.listenAddr, "listen", "l", ":8000", "address used to serve prometheus metrics")
+	flags.StringVarP(&runOpts.ethereumRpcAddr, "ethereum", "e", "", "Ethereum RPC address")
+	flags.StringVarP(&runOpts.assetPoolContract, "asset-pool", "p", "", "ERC20 Asset Pool smart-contract address")
 }
 
-func runStream(cmd *cobra.Command, args []string) error {
+func run(cmd *cobra.Command, args []string) error {
 	return app.Run(
-		streamOpts.datanodeAddr,
-		streamOpts.tendermintAddr,
-		streamOpts.listenAddr,
-		streamOpts.datanodeInsecure,
-		streamOpts.tendermintInsecure,
+		runOpts.datanodeAddr,
+		runOpts.tendermintAddr,
+		runOpts.ethereumRpcAddr,
+		runOpts.assetPoolContract,
+		runOpts.listenAddr,
+		runOpts.datanodeTls,
+		runOpts.tendermintTls,
 	)
 }
