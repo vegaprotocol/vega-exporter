@@ -82,6 +82,8 @@ func (a *App) getBalances(ctx context.Context, tdsClient datanode.TradingDataSer
 				"asset": name,
 			}
 			a.prometheusGauges["erc20AssetBalance"].With(labels).Set(balance)
+		} else {
+			log.Error().Err(err).Msg("unable to query erc20 asset balance")
 		}
 	}
 }
