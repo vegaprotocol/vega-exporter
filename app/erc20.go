@@ -74,8 +74,8 @@ func (a *App) StartAssetPoolWatch(
 func (a *App) getBalances(ctx context.Context, tdsClient datanode.TradingDataServiceClient) {
 	assetsResp, _ := tdsClient.ListAssets(ctx, &datanode.ListAssetsRequest{})
 	for _, e := range assetsResp.GetAssets().GetEdges() {
-		tokenAddress := e.GetNode().GetDetails().GetErc20().GetContractAddress()
-		name, balance, err := token.GetERC20Balance(tokenAddress, a.ethereumRpcAddr)
+		tokenAddr := e.GetNode().GetDetails().GetErc20().GetContractAddress()
+		name, balance, err := token.GetERC20Balance(tokenAddr, a.assetPoolContract, a.ethereumRpcAddr)
 
 		if err == nil {
 			labels := prometheus.Labels{

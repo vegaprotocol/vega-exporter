@@ -9,20 +9,20 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func GetERC20Balance(erc20TokenAddress, ethereumRpcAddr string) (string, float64, error) {
+func GetERC20Balance(erc20TokenAddr, assetPoolAddr, ethereumRpcAddr string) (string, float64, error) {
 	client, err := ethclient.Dial(ethereumRpcAddr)
 	if err != nil {
 		return "", 0, err
 	}
 
 	// VEGA erc20 contract Address
-	tokenAddress := common.HexToAddress(erc20TokenAddress)
+	tokenAddress := common.HexToAddress(erc20TokenAddr)
 	instance, err := NewToken(tokenAddress, client)
 	if err != nil {
 		return "", 0, err
 	}
 
-	address := common.HexToAddress("0x2Fe022FFcF16B515A13077e53B0a19b3e3447855")
+	address := common.HexToAddress(assetPoolAddr)
 	bal, err := instance.BalanceOf(&bind.CallOpts{}, address)
 	if err != nil {
 		return "", 0, err
