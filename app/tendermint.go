@@ -41,8 +41,6 @@ func (a *App) StartTMObserver(
 			log.Error().Err(err).Msg("Failed to parse tendermint status response")
 		}
 
-		chainID := status.NodeInfo.Network
-
 		query := "tm.event = 'NewBlock'"
 		err = tmclient.Subscribe(ctx, query)
 		if err != nil {
@@ -71,13 +69,13 @@ func (a *App) StartTMObserver(
 
 				switch tmEvent.Data.Type {
 				case "tendermint/event/NewBlock":
-					err = a.handleTendermintBlockEvent(ctx, result, chainID)
+					err = a.handleTendermintBlockEvent(ctx, result)
 					if err != nil {
 						log.Error().Err(err).Msg("Failed to handle tendermint block event")
 					}
 
 				case "tendermint/event/Tx":
-					_ = a.handleTendermintTx(ctx, tmEvent, chainID)
+					_ = a.handleTendermintTx(ctx, tmEvent)
 				}
 
 			case <-quit:
@@ -88,7 +86,7 @@ func (a *App) StartTMObserver(
 	return nil
 }
 
-func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes.RPCResponse, chainID string) (err error) {
+func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes.RPCResponse) (err error) {
 	blockEvent := BlockEvent{}
 	err = json.Unmarshal(event.Result, &blockEvent)
 	if err != nil {
@@ -111,9 +109,8 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 		}
 	}
 	proposerLabels := prometheus.Labels{
-		"chain_id": chainID,
-		"address":  address,
-		"name":     validatorName,
+		"address": address,
+		"name":    validatorName,
 	}
 	a.prometheusCounters["totalProposedBlocks"].With(proposerLabels).Inc()
 
@@ -133,9 +130,8 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 			}
 		}
 		signersLabels := prometheus.Labels{
-			"chain_id": chainID,
-			"address":  address,
-			"name":     signerName,
+			"address": address,
+			"name":    signerName,
 		}
 		a.prometheusCounters["totalSignedBlocks"].With(signersLabels).Inc()
 	}
@@ -143,7 +139,7 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 	return err
 }
 
-func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string) (err error) {
+func (a *App) handleTendermintTx(ctx context.Context, e TmEvent) (err error) {
 	references := make(map[string]string)
 
 	if len(e.Events.CommandType) == 0 {
@@ -168,9 +164,8 @@ func (a *App) handleTendermintTx(ctx context.Context, e TmEvent, chainID string)
 		}
 	}
 	labels := prometheus.Labels{
-		"chain_id": chainID,
-		"address":  address,
-		"name":     validatorName,
+		"address": address,
+		"name":    validatorName,
 	}
 
 	logEvent := log.Debug().

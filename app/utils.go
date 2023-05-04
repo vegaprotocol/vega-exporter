@@ -129,7 +129,7 @@ func (a *App) getNodesNames(
 }
 
 func (a *App) getAssetInfo(
-	ctx context.Context, conn *grpc.ClientConn, assetID string, chainID string,
+	ctx context.Context, conn *grpc.ClientConn, assetID string,
 ) (asset string, decimals uint64, quantum float64) {
 
 	tdsClient := datanode.NewTradingDataServiceClient(conn)
@@ -147,9 +147,9 @@ func (a *App) getAssetInfo(
 		if err != nil {
 			log.Error().Err(err).Msg("unable to parse asset quantum")
 		} else {
-			a.prometheusGauges["assetQuantum"].With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(quantum)
+			a.prometheusGauges["assetQuantum"].With(prometheus.Labels{"asset": asset}).Set(quantum)
 		}
-		a.prometheusGauges["assetDecimals"].With(prometheus.Labels{"asset": asset, "chain_id": chainID}).Set(float64(decimals))
+		a.prometheusGauges["assetDecimals"].With(prometheus.Labels{"asset": asset}).Set(float64(decimals))
 	}
 	return
 }

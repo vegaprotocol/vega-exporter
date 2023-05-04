@@ -145,8 +145,7 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 
 func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	w := e.GetWithdrawal()
-	chainID := e.GetChainId()
-	asset, decimals, _ := a.getAssetInfo(ctx, conn, w.Asset, chainID)
+	asset, decimals, _ := a.getAssetInfo(ctx, conn, w.Asset)
 
 	amount, err := strconv.ParseFloat(w.GetAmount(), 64)
 	amount = amount / math.Pow(10, float64(decimals))
@@ -160,10 +159,9 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 	}
 
 	labels := prometheus.Labels{
-		"chain_id": chainID,
-		"status":   w.GetStatus().String(),
-		"asset":    asset,
-		"eth_tx":   ethTx,
+		"status": w.GetStatus().String(),
+		"asset":  asset,
+		"eth_tx": ethTx,
 	}
 	a.prometheusCounters["sumWithdrawals"].With(labels).Add(amount)
 	a.prometheusCounters["countWithdrawals"].With(labels).Inc()
@@ -173,7 +171,6 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 		Str("block", e.Block).
 		Str("vega_tx_hash", e.TxHash).
 		Str("eth_tx_hash", w.GetTxHash()).
-		Str("chain_id", chainID).
 		Str("type", "WITHDRAWAL").
 		Str("asset", asset).
 		Float64("amount", amount).
@@ -189,7 +186,6 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 
 func (a *App) handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	md := e.GetMarketData()
-	chainID := e.GetChainId()
 
 	if md.MarketTradingMode == proto.Market_TRADING_MODE_CONTINUOUS {
 		sellPrice, err := strconv.ParseFloat(md.GetBestOfferPrice(), 64)
@@ -204,7 +200,6 @@ func (a *App) handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *ev
 		}
 
 		labels := prometheus.Labels{
-			"chain_id":  chainID,
 			"market":    a.getMarketName(ctx, conn, md.GetMarket()),
 			"market_id": md.GetMarket(),
 		}
@@ -226,8 +221,7 @@ func (a *App) handleMarketData(ctx context.Context, conn *grpc.ClientConn, e *ev
 
 func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	t := e.GetTransfer()
-	chainID := e.GetChainId()
-	asset, decimals, _ := a.getAssetInfo(ctx, conn, t.Asset, chainID)
+	asset, decimals, _ := a.getAssetInfo(ctx, conn, t.Asset)
 
 	rawAmount, err := strconv.ParseFloat(t.GetAmount(), 64)
 	if err != nil {
@@ -237,9 +231,8 @@ func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eve
 	amount := rawAmount / math.Pow(10, float64(decimals))
 
 	labels := prometheus.Labels{
-		"chain_id": chainID,
-		"status":   t.GetStatus().String(),
-		"asset":    asset,
+		"status": t.GetStatus().String(),
+		"asset":  asset,
 	}
 
 	a.prometheusCounters["sumTransfers"].With(labels).Add(amount)
@@ -250,7 +243,6 @@ func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eve
 		Str("block", e.Block).
 		Str("tx_hash", e.TxHash).
 		Str("type", "TRANSFER").
-		Str("chain_id", chainID).
 		Str("asset", asset).
 		Float64("amount", amount).
 		Str("from_account", t.GetFrom()).
@@ -266,7 +258,6 @@ func (a *App) handleTransfers(ctx context.Context, conn *grpc.ClientConn, e *eve
 
 func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	tr := e.GetLedgerMovements()
-	chainID := e.GetChainId()
 
 	for _, lm := range tr.LedgerMovements {
 		for _, entry := range lm.GetEntries() {
@@ -277,7 +268,7 @@ func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e
 				log.Error().Err(err).Msg("unable to parse event err")
 				return
 			}
-			asset, decimals, _ := a.getAssetInfo(ctx, conn, fromAccount.GetAssetId(), chainID)
+			asset, decimals, _ := a.getAssetInfo(ctx, conn, fromAccount.GetAssetId())
 			amount = amount / math.Pow(10, float64(decimals))
 
 			if err != nil {
@@ -296,7 +287,6 @@ func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e
 			}
 
 			labels := prometheus.Labels{
-				"chain_id":          chainID,
 				"asset":             asset,
 				"type":              ledgerEvtType,
 				"from_account_type": fromAccountType,
@@ -311,7 +301,6 @@ func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e
 				Str("_id", e.Id).
 				Str("block", e.Block).
 				Str("tx_hash", e.TxHash).
-				Str("chain_id", chainID).
 				Str("event_type", e.Type.String()).
 				Str("type", ledgerEvtType).
 				Str("from_account_type", fromAccountType).
@@ -328,7 +317,6 @@ func (a *App) handleLedgerMovement(ctx context.Context, conn *grpc.ClientConn, e
 
 func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	s := e.GetSettleMarket()
-	chainID := e.GetChainId()
 	marketID := s.GetMarketId()
 	market := marketID
 	if marketID != "" {
@@ -341,7 +329,7 @@ func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *e
 		log.Error().Err(err).Msg("unable to parse event err")
 		return
 	}
-	asset, decimals, _ := a.getAssetInfo(ctx, conn, assetID, chainID)
+	asset, decimals, _ := a.getAssetInfo(ctx, conn, assetID)
 
 	rawPrice, err := strconv.ParseFloat(s.GetPrice(), 64)
 	if err != nil {
@@ -351,7 +339,6 @@ func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *e
 	price := rawPrice / math.Pow(10, float64(decimals))
 
 	labels := prometheus.Labels{
-		"chain_id":  chainID,
 		"asset":     asset,
 		"market_id": marketID,
 		"market":    market,
@@ -364,7 +351,6 @@ func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *e
 		Str("event_type", e.Type.String()).
 		Str("block", e.Block).
 		Str("tx_hash", e.TxHash).
-		Str("chain_id", chainID).
 		Str("market", market).
 		Str("market_id", marketID).
 		Str("position_factor", positionFactor).
@@ -377,10 +363,8 @@ func (a *App) handleSettlements(ctx context.Context, conn *grpc.ClientConn, e *e
 
 func (a *App) handleRewardPayout(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
 	rp := e.GetRewardPayout()
-	chainID := e.GetChainId()
 
 	labels := prometheus.Labels{
-		"chain_id":    chainID,
 		"asset":       rp.GetAsset(),
 		"reward_type": rp.GetRewardType(),
 	}
@@ -403,7 +387,6 @@ func (a *App) handleRewardPayout(ctx context.Context, conn *grpc.ClientConn, e *
 		Str("event_type", e.Type.String()).
 		Str("block", e.Block).
 		Str("tx_hash", e.TxHash).
-		Str("chain_id", chainID).
 		Str("amount", rp.GetAmount()).
 		Str("reward_percentage", rp.GetPercentOfTotalReward()).
 		Str("asset", rp.GetAsset()).
@@ -412,23 +395,16 @@ func (a *App) handleRewardPayout(ctx context.Context, conn *grpc.ClientConn, e *
 }
 
 func (a *App) handleTimeUpdate(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
-	chainID := e.GetChainId()
 	partyCount := a.getPartiesCount(ctx, conn)
 
-	labels := prometheus.Labels{
-		"chain_id": chainID,
-	}
-
-	a.prometheusGauges["partyCountTotal"].With(labels).Set(float64(partyCount))
+	a.prometheusGauges["partyCountTotal"].With(prometheus.Labels{}).Set(float64(partyCount))
 }
 
 func (a *App) handleProposal(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
-	chainID := e.GetChainId()
 	p := e.GetProposal()
 
 	labels := prometheus.Labels{
-		"chain_id": chainID,
-		"state":    p.State.String(),
+		"state": p.State.String(),
 	}
 
 	a.prometheusCounters["proposals"].With(labels).Inc()
@@ -438,7 +414,6 @@ func (a *App) handleProposal(ctx context.Context, conn *grpc.ClientConn, e *even
 		Str("event_type", e.Type.String()).
 		Str("block", e.Block).
 		Str("tx_hash", e.TxHash).
-		Str("chain_id", chainID).
 		Str("proposal_id", p.GetId()).
 		Str("proposal_party_id", p.GetPartyId()).
 		Str("propsal_state", p.GetState().String()).
