@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -154,11 +155,41 @@ func (a *App) getAssetInfo(
 	return
 }
 
-func (a *App) getPartiesCount(ctx context.Context, conn *grpc.ClientConn) (partyCount int) {
+func (a *App) getPartiesCount(ctx context.Context, conn *grpc.ClientConn) {
 
 	tdsClient := datanode.NewTradingDataServiceClient(conn)
 	parties, _ := tdsClient.ListParties(ctx, &datanode.ListPartiesRequest{})
-	return len(parties.GetParties().GetEdges())
+	a.prometheusGauges["partyCountTotal"].With(prometheus.Labels{}).Set(float64(len(parties.GetParties().GetEdges())))
+}
+
+func (a *App) getAccountsAssets(ctx context.Context, conn *grpc.ClientConn) {
+
+	tdsClient := datanode.NewTradingDataServiceClient(conn)
+	accounts, _ := tdsClient.ListAccounts(ctx, &datanode.ListAccountsRequest{})
+	balances := map[string]float64{}
+	for _, account := range accounts.GetAccounts().GetEdges() {
+		assetID := account.GetNode().GetAsset()
+		asset := ""
+		assetsReq := &datanode.GetAssetRequest{AssetId: assetID}
+		assetResp, err := tdsClient.GetAsset(ctx, assetsReq)
+		if err != nil {
+			log.Error().Err(err).Msg("unable to fetch asset")
+			asset = assetID
+		} else {
+			asset = assetResp.GetAsset().GetDetails().GetSymbol()
+		}
+		if balance, err := strconv.ParseFloat(account.GetNode().GetBalance(), 64); err == nil {
+			decimalFixedBalance := balance / math.Pow(10, float64(assetResp.GetAsset().GetDetails().GetDecimals()))
+			if existingBalance, ok := balances[asset]; ok {
+				balances[asset] = existingBalance + decimalFixedBalance
+			} else {
+				balances[asset] = decimalFixedBalance
+			}
+		}
+	}
+	for asset, balance := range balances {
+		a.prometheusGauges["vegaAccountsBalances"].With(prometheus.Labels{"asset": asset}).Set(balance)
+	}
 }
 
 // WaitSig waits until Terminate or interrupt event is received

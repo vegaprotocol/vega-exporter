@@ -8,6 +8,13 @@ import (
 )
 
 func (a *App) initMetrics(listenAddr string) {
+	a.prometheusGauges["up"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_exporter_up",
+			Help: "1 if the exporter is running, otherwise 0",
+		},
+		[]string{},
+	)
 	a.prometheusCounters["sumWithdrawals"] = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "vega_withdrawals_sum_total",
@@ -169,6 +176,14 @@ func (a *App) initMetrics(listenAddr string) {
 			Help: "Total reward payout per asset, based on the percentOfTotalReward value and amount of each event.",
 		},
 		[]string{"reward_type", "asset"},
+	)
+
+	a.prometheusGauges["vegaAccountsBalances"] = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vega_accounts_balance",
+			Help: "Total accounts balance per asset",
+		},
+		[]string{"asset"},
 	)
 
 	for _, counter := range a.prometheusCounters {

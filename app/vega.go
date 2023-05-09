@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	proto "code.vegaprotocol.io/vega/protos/vega"
@@ -27,6 +30,9 @@ func (a *App) StartVegaObserver(
 	wg *sync.WaitGroup,
 ) error {
 	conn, stream, err := a.connect(ctx)
+	gracefulStop := make(chan os.Signal, 1)
+	signal.Notify(gracefulStop, syscall.SIGTERM)
+	signal.Notify(gracefulStop, syscall.SIGINT)
 
 	if err != nil {
 		return fmt.Errorf("failed to connect to datanode event stream: %w", err)
@@ -70,6 +76,19 @@ func (a *App) StartVegaObserver(
 			}
 		}
 	}()
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				a.getPartiesCount(ctx, conn)
+				a.getAccountsAssets(ctx, conn)
+			}
+		}
+	}()
+
 	return nil
 }
 
@@ -106,7 +125,6 @@ func (a *App) connect(ctx context.Context) (
 		eventspb.BusEventType_BUS_EVENT_TYPE_MARKET_DATA,
 		eventspb.BusEventType_BUS_EVENT_TYPE_LEDGER_MOVEMENTS,
 		eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET,
-		eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE,
 		eventspb.BusEventType_BUS_EVENT_TYPE_REWARD_PAYOUT_EVENT,
 		eventspb.BusEventType_BUS_EVENT_TYPE_PROPOSAL,
 	}
@@ -134,8 +152,6 @@ func (a *App) handleEvents(ctx context.Context, conn *grpc.ClientConn, e *events
 		a.handleLedgerMovement(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_SETTLE_MARKET:
 		a.handleSettlements(ctx, conn, e)
-	case eventspb.BusEventType_BUS_EVENT_TYPE_TIME_UPDATE:
-		a.handleTimeUpdate(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_REWARD_PAYOUT_EVENT:
 		a.handleRewardPayout(ctx, conn, e)
 	case eventspb.BusEventType_BUS_EVENT_TYPE_PROPOSAL:
@@ -178,7 +194,6 @@ func (a *App) handleWithdrawals(ctx context.Context, conn *grpc.ClientConn, e *e
 		Str("ref", w.GetRef()).
 		Str("erc20_rcv_addr", w.GetExt().GetErc20().GetReceiverAddress()).
 		Str("status", w.GetStatus().String()).
-		Int64("expiry", w.GetExpiry()).
 		Int64("created_at", w.GetCreatedTimestamp()).
 		Int64("withdrawn_at", w.GetWithdrawnTimestamp()).
 		Send()
@@ -392,12 +407,6 @@ func (a *App) handleRewardPayout(ctx context.Context, conn *grpc.ClientConn, e *
 		Str("asset", rp.GetAsset()).
 		Str("reward_type", rp.GetRewardType()).
 		Send()
-}
-
-func (a *App) handleTimeUpdate(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
-	partyCount := a.getPartiesCount(ctx, conn)
-
-	a.prometheusGauges["partyCountTotal"].With(prometheus.Labels{}).Set(float64(partyCount))
 }
 
 func (a *App) handleProposal(ctx context.Context, conn *grpc.ClientConn, e *eventspb.BusEvent) {
