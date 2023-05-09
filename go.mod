@@ -6,7 +6,7 @@ require (
 	code.vegaprotocol.io/vega v0.71.4
 	github.com/ethereum/go-ethereum v1.11.2
 	github.com/prometheus/client_golang v1.14.0
-	github.com/rs/zerolog v1.28.0
+	github.com/rs/zerolog v1.29.1
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.8.1
 	github.com/tendermint/tendermint v0.35.9
