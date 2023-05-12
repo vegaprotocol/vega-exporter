@@ -116,24 +116,26 @@ func (a *App) handleTendermintBlockEvent(ctx context.Context, event jsonrpcTypes
 
 	// Signers
 	for _, s := range blockEvent.Data.Value.Block.LastCommit.Signatures {
-		signerName := ""
-		if val, ok := a.nodeList[address]; ok {
-			signerName = val
-		} else {
-			// refresh validator list
-			a.nodeList, err = a.getNodesNames(ctx)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to fetch node list")
-			}
+		if s.Signature != "" {
+			signerName := ""
 			if val, ok := a.nodeList[s.ValidatorAddress]; ok {
 				signerName = val
+			} else {
+				// refresh validator list
+				a.nodeList, err = a.getNodesNames(ctx)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to fetch node list")
+				}
+				if val, ok := a.nodeList[s.ValidatorAddress]; ok {
+					signerName = val
+				}
 			}
+			signersLabels := prometheus.Labels{
+				"address": s.ValidatorAddress,
+				"name":    signerName,
+			}
+			a.prometheusCounters["totalSignedBlocks"].With(signersLabels).Inc()
 		}
-		signersLabels := prometheus.Labels{
-			"address": address,
-			"name":    signerName,
-		}
-		a.prometheusCounters["totalSignedBlocks"].With(signersLabels).Inc()
 	}
 
 	return err
