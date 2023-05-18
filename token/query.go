@@ -33,7 +33,7 @@ func GetERC20Balance(erc20TokenAddr, assetPoolAddr, ethereumRpcAddr string) (str
 		return "", 0, err
 	}
 
-	name, err := instance.Name(&bind.CallOpts{})
+	name, err := instance.Symbol(&bind.CallOpts{})
 	if err != nil {
 		return "", 0, err
 	}
